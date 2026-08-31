@@ -1,0 +1,53 @@
+<!-- PATRON — bandeau texte-punch : 2 à 4 mots qui claquent (un chiffre, un nom, une punchline)
+     posés par-dessus le visage, dans les couleurs du créateur.
+     À COPIER dans stories/<slug>/bandeau.html, puis adapter : le texte, les deux variables de
+     couleur (reprendre visual.accent et visual.bg de brand.config.json), les timings.
+     Rendu en calque transparent :
+       npx hyperframes render -c stories/<slug>/bandeau.html --format mov -o stories/<slug>/bandeau.mov
+     Déclaré ensuite dans story.json (PLEIN CADRE : w = 1080, y = 960) :
+       "overlays": [{"src": "stories/<slug>/bandeau.mov", "start": …, "end": …, "y": 960, "w": 1080}]
+     Si le bandeau occupe la ligne des sous-titres, descendre les captions concernées ("y": 1420). -->
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1080, height=1920">
+    <script src="../../assets/vendor/gsap.min.js"></script>
+    <style>
+      :root {
+        --bandeau-bg: #ffffff;     /* ← visual.accent du brand.config.json */
+        --bandeau-text: #161616;   /* ← une couleur qui contraste avec le fond ci-dessus */
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+      #bandeau { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; }
+      #bandeau .punch {
+        position: absolute; left: 50%; top: 640px; transform: translate(-50%, -50%);
+        background: var(--bandeau-bg); color: var(--bandeau-text);
+        font-family: "Inter", "Helvetica Neue", Arial, sans-serif; font-weight: 900;
+        font-size: 64px; line-height: 1.1; letter-spacing: -0.01em;
+        padding: 18px 36px; border-radius: 14px; white-space: nowrap;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); transform-origin: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="bandeau" data-composition-id="bandeau" data-start="0" data-duration="3.0"
+         data-fps="30" data-width="1080" data-height="1920">
+      <div class="punch clip" id="punch-0" data-start="0.00" data-duration="3.00" data-track-index="0">
+        + 30 000 vues
+      </div>
+    </div>
+    <script>
+      (function () {
+        window.__timelines = window.__timelines || {};
+        const tl = gsap.timeline({ paused: true });
+        // Entrée : opacity + scale UNIQUEMENT (jamais x/y sur un élément timé).
+        tl.fromTo("#bandeau #punch-0", { opacity: 0, scale: 0.6, rotate: -4 },
+                  { opacity: 1, scale: 1, rotate: -2, duration: 0.45, ease: "back.out(2.2)" }, 0.0);
+        tl.to("#bandeau #punch-0", { opacity: 0, scale: 0.85, duration: 0.30, ease: "power2.in" }, 2.65);
+        window.__timelines["bandeau"] = tl;
+      })();
+    </script>
+  </body>
+</html>
