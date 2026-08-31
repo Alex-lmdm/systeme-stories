@@ -67,6 +67,19 @@ FFMPEG = _env_bin("ffmpegPath", "ffmpeg")
 WHISPER = _env_bin("whisperCli", "whisper-cli")
 
 
+def _ffprobe_bin():
+    """ffprobe vit à côté de ffmpeg : si ffmpegPath est un chemin custom (Windows), on le dérive."""
+    p = pathlib.Path(FFMPEG)
+    if p.name.lower().startswith("ffmpeg") and p.parent != pathlib.Path("."):
+        cand = p.with_name(p.name.replace("ffmpeg", "ffprobe"))
+        if cand.exists():
+            return str(cand)
+    return "ffprobe"
+
+
+FFPROBE = _ffprobe_bin()
+
+
 def whisper_model():
     v = (_brand_config().get("env") or {}).get("whisperModel")
     if v and pathlib.Path(v).expanduser().exists():
@@ -108,7 +121,7 @@ def run(cmd, **kw):
 
 
 def probe(path, entries="format=duration"):
-    r = run(["ffprobe", "-v", "error", "-show_entries", entries,
+    r = run([FFPROBE, "-v", "error", "-show_entries", entries,
              "-of", "default=nw=1:nk=1", str(path)])
     return r.stdout.strip()
 

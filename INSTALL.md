@@ -34,16 +34,22 @@ Installe l'extension étape par étape, sans jamais rien casser. Suis ces règle
    a) `.claude/skills/story/`, `.claude/skills/story-script/`, `.claude/skills/setup-stories/`
       → dans `.claude/skills/` ;
    b) `tools/story.py` et `tools/story_text.py` → dans `tools/` ;
-   c) crée le dossier `stories/` s'il n'existe pas.
+   c) crée le dossier `stories/` s'il n'existe pas ;
+   d) AIGUILLAGE : si `templates/AGENT.md.tpl` ne contient PAS le marqueur
+      « BEGIN EXTENSION: systeme-stories », ajoute le contenu INTÉGRAL du fichier
+      `templates/agent-extension-stories.md` de l'extension À LA FIN de
+      `templates/AGENT.md.tpl` (sans le modifier). S'il contient déjà le marqueur, ne
+      touche à rien.
 
 3. VÉRIFIE Python et Pillow (le rendu des sous-titres en dépend) :
    - `python3 --version` (macOS l'a toujours ; Windows : `python --version`) ;
    - `python3 -c "import PIL"` — si ça échoue : `python3 -m pip install --user pillow`
      (Windows : `python -m pip install --user pillow`).
 
-4. Lance `npm run sync` à la racine (il duplique les nouveaux skills pour Codex dans
-   `.agents/skills/`). Si la commande échoue, copie simplement les 3 dossiers de skills
-   dans `.agents/skills/` à la main.
+4. Lance `npm run sync` à la racine (il régénère CLAUDE.md / AGENTS.md avec l'aiguillage
+   stories, et duplique les nouveaux skills pour Codex dans `.agents/skills/`). Si la
+   commande échoue, copie simplement les 3 dossiers de skills dans `.agents/skills/` à la
+   main.
 
 5. SMOKE TEST : exécute
    `python3 -c "import sys; sys.path.insert(0,'tools'); import story_text; story_text.caption_png('test sous-titre','stories/_test.png'); print('ok')"`
@@ -72,8 +78,10 @@ C'est tout. Laisse l'IA travailler et réponds-lui quand elle te pose une questi
    (et dans `.agents/skills/` si tu utilises Codex).
 3. Copie `tools/story.py` et `tools/story_text.py` dans le dossier `tools/`.
 4. Crée un dossier `stories/` à la racine.
-5. Vérifie Pillow : `python3 -c "import PIL"` — sinon `python3 -m pip install --user pillow`.
-6. Ouvre ton agent dans le dossier et lance `/setup-stories`.
+5. Ajoute le contenu de `templates/agent-extension-stories.md` à la fin de
+   `templates/AGENT.md.tpl` (une seule fois), puis lance `npm run sync`.
+6. Vérifie Pillow : `python3 -c "import PIL"` — sinon `python3 -m pip install --user pillow`.
+7. Ouvre ton agent dans le dossier et lance `/setup-stories`.
 
 ## Problèmes courants
 
