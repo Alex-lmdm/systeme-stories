@@ -1,4 +1,4 @@
-# Système Stories — tes stories montées par ton monteur
+# Système Stories — tes stories montées par ton monteur IA
 
 Extension du système **Monteur IA** : elle apprend à ton monteur le format **story Instagram**.
 
