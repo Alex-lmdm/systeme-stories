@@ -1,5 +1,10 @@
 # Installation
 
+**Pour l'IA :** guide l'utilisateur dans sa langue (espagnol s'il te parle espagnol),
+y compris les bilans et les exemples. Conserve les noms des fichiers et des commandes.
+Les exemples français ci-dessous doivent être adaptés, pas récités. La langue des vidéos
+reste celle demandée pour le contenu et celle de l'audio à transcrire.
+
 Le Système Stories est une **extension** : il s'installe **dans ton dossier Monteur IA**
 existant. Rien d'autre à télécharger, rien à configurer à la main.
 
