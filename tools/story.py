@@ -61,8 +61,18 @@ def _brand_config():
 
 
 def _env_bin(key, fallback):
+    """Binaire réglé dans env : son chemin, ou le dossier qui le contient (convention du dérush
+    pour ffmpegPath) ; sinon le PATH."""
     v = (_brand_config().get("env") or {}).get(key)
-    if v and (pathlib.Path(v).exists() or shutil.which(v)):
+    if not v:
+        return fallback
+    p = pathlib.Path(v).expanduser()
+    if p.is_dir():
+        for ext in ("", ".exe"):
+            if (p / f"{fallback}{ext}").is_file():
+                return str(p / f"{fallback}{ext}")
+        return fallback
+    if p.is_file() or shutil.which(v):
         return v
     return fallback
 
