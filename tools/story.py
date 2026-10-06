@@ -54,7 +54,7 @@ def _brand_config():
     p = ROOT / "brand.config.json"
     if p.exists():
         try:
-            return json.loads(p.read_text())
+            return json.loads(p.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             pass
     return {}
@@ -113,15 +113,15 @@ def load(slug):
     st = story_style()
     base = {**DEFAULTS, "caption_y": st["captionY"], "caption_size": st["captionSize"],
             "caption_case": st["captionCase"]}
-    return {**base, **json.loads(p.read_text())}
+    return {**base, **json.loads(p.read_text(encoding="utf-8"))}
 
 
 def save(slug, cfg):
-    (sdir(slug) / "story.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=1))
+    (sdir(slug) / "story.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 def run(cmd, **kw):
-    return subprocess.run(cmd, capture_output=True, text=True, **kw)
+    return subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", **kw)
 
 
 def probe(path, entries="format=duration"):
@@ -267,7 +267,7 @@ def cmd_words(a):
                               "end": round(base + _secs(*m.group(4, 5, 6)), 3),
                               "take": tk["i"]})
     p = sdir(a.slug) / "words.json"
-    p.write_text(json.dumps(words, ensure_ascii=False, indent=1))
+    p.write_text(json.dumps(words, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"{len(words)} mots -> {p}")
 
 
@@ -315,7 +315,7 @@ def cmd_captions(a):
     wp = sdir(a.slug) / "words.json"
     if not wp.exists():
         sys.exit("words.json manquant : lance `story.py words` d'abord.")
-    words = json.loads(wp.read_text())
+    words = json.loads(wp.read_text(encoding="utf-8"))
     takes = takes_of(cfg)
     caps = []
     for tk in takes:

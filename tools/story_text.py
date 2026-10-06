@@ -46,7 +46,7 @@ def load_config():
     p = ROOT / "brand.config.json"
     if p.exists():
         try:
-            cfg = json.loads(p.read_text())
+            cfg = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             cfg = {}
     story = {**DEFAULT_STORY, **(cfg.get("story") or {})}
