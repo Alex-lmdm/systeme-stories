@@ -19,6 +19,21 @@ existant. Rien d'autre à télécharger, rien à configurer à la main.
 > et dis-lui : « Télécharge l'extension https://github.com/Alex-lmdm/systeme-stories et suis
 > les instructions d'installation de son INSTALL.md. » Il fait tout.
 
+**Pour l'IA, si on te demande de télécharger l'extension :** télécharge-la dans un dossier
+temporaire neuf, jamais dans le dossier Monteur IA. Crée-le avec
+`node -p "require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'systeme-stories-'))"`,
+puis, dans ce dossier (PowerShell : `curl.exe`, et `;` au lieu de `&&`) :
+
+```bash
+cd "<dossier temporaire>" && curl -fL -o systeme-stories.tar.gz https://github.com/Alex-lmdm/systeme-stories/archive/refs/heads/main.tar.gz && tar -xzf systeme-stories.tar.gz
+```
+
+Le dossier de l'extension est alors `<dossier temporaire>/systeme-stories-main` : suis le bloc ci-dessous
+avec ce chemin en première ligne.
+
+**Mettre à jour l'extension** : même phrase. La nouvelle version remplace l'ancienne, tes réglages
+sont gardés ; inutile de refaire le setup.
+
 Sinon, télécharge le ZIP de ce repo, dézippe-le où tu veux, ouvre ton agent **dans ton dossier
 Monteur IA**, et copie-colle exactement le bloc ci-dessous comme premier message (remplace le
 chemin de la première ligne par l'endroit où tu as dézippé) :
