@@ -1,5 +1,3 @@
-
-
 <!-- BEGIN EXTENSION: systeme-stories (ajouté par l'installation du Système Stories ; ne pas dupliquer) -->
 
 ## 🟣 Extension installée : Système Stories
