@@ -39,7 +39,13 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 try:  # Monteur IA 2 (un Reel = un projet) : les stories vivent dans le dossier Monteur IA, jamais dans un Reel
     from lieux import MAISON as ROOT  # noqa: E402
 except ImportError:  # Monteur IA 1 : la racine du projet
-    pass
+    # Windows : une sortie lue par l'agent (redirigée) est en cp1252, et un « ⚠️ » y fait planter
+    # l'outil. Monteur IA 2 règle ça dans lieux.py.
+    for _flux in (sys.stdout, sys.stderr):
+        try:
+            _flux.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
 STORIES = ROOT / "stories"
 
 W, H, FPS = 1080, 1920, "30000/1001"
