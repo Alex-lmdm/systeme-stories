@@ -20,7 +20,7 @@ existant. Rien d'autre à télécharger, rien à configurer à la main.
 > les instructions d'installation de son INSTALL.md. » Il fait tout.
 
 **Pour l'IA, si on te demande de télécharger l'extension :** télécharge-la dans un dossier
-temporaire neuf, jamais dans le dossier Monteur IA. Crée-le avec
+temporaire (celui de la mise à jour de Monteur IA convient), jamais dans le dossier Monteur IA. Crée-le avec
 `node -p "require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'systeme-stories-'))"`,
 puis, dans ce dossier (PowerShell : `curl.exe`, et `;` au lieu de `&&`) :
 
