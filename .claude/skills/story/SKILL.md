@@ -15,6 +15,11 @@ description: >-
 > Tout se fait en ffmpeg via `tools/story.py`. Si tu te retrouves à écrire du HTML, tu t'es trompé
 > de pipeline (sauf porte de sortie §8).
 
+> **Où travailler :** une story vit dans `stories/<slug>/` du **dossier Monteur IA** (celui qui
+> contient `reels/`), jamais dans un Reel. Lance chaque commande depuis ce dossier : les chemins de
+> ce skill partent de là. (Ancienne installation sans `reels/` : la racine du projet, comme avant.)
+> Dans l'app HyperFrames, une story n'a ni aperçu ni timeline : elle sort directement en MP4.
+
 > Le style des sous-titres (police, skin, position) vient de `brand.config.json` → section
 > `story`, écrite par **`/setup-stories`**. Si cette section n'existe pas encore, propose de
 > lancer `/setup-stories` (2 minutes) avant le premier montage — sinon la story sort dans le

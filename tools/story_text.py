@@ -15,6 +15,10 @@ import pathlib
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+try:  # Monteur IA 2 : réglages et polices dans le dossier Monteur IA, même depuis un Reel
+    from lieux import MAISON as ROOT  # noqa: E402
+except ImportError:  # Monteur IA 1 : la racine du projet
+    pass
 
 W, H = 1080, 1920
 SAFE_X = 100                      # safe-zone latérale Instagram

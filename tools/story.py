@@ -36,6 +36,10 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import story_text as ST  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+try:  # Monteur IA 2 (un Reel = un projet) : les stories vivent dans le dossier Monteur IA, jamais dans un Reel
+    from lieux import MAISON as ROOT  # noqa: E402
+except ImportError:  # Monteur IA 1 : la racine du projet
+    pass
 STORIES = ROOT / "stories"
 
 W, H, FPS = 1080, 1920, "30000/1001"

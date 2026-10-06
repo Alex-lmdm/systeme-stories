@@ -43,8 +43,10 @@ Installe l'extension étape par étape, sans jamais rien casser. Suis ces règle
    d) AIGUILLAGE : si `templates/AGENT.md.tpl` ne contient PAS le marqueur
       « BEGIN EXTENSION: systeme-stories », ajoute le contenu INTÉGRAL du fichier
       `templates/agent-extension-stories.md` de l'extension À LA FIN de
-      `templates/AGENT.md.tpl` (sans le modifier). S'il contient déjà le marqueur, ne
-      touche à rien.
+      `templates/AGENT.md.tpl` (sans le modifier). S'il contient déjà le marqueur,
+      REMPLACE tout le bloc, de « BEGIN EXTENSION: systeme-stories » à « END EXTENSION:
+      systeme-stories » (marqueurs compris), par ce même fichier : c'est ainsi qu'une
+      nouvelle version de l'extension met ses consignes à jour, jamais en double.
 
 3. VÉRIFIE Python et Pillow (le rendu des sous-titres en dépend) :
    - `python3 --version` (macOS l'a toujours ; Windows : `python --version`) ;
