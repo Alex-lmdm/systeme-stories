@@ -16,9 +16,10 @@ description: >-
 > de pipeline (sauf porte de sortie §8).
 
 > **Où travailler :** une story vit dans `stories/<slug>/` du **dossier Monteur IA** (celui qui
-> contient `reels/`), jamais dans un Reel. Lance chaque commande depuis ce dossier : les chemins de
-> ce skill partent de là. (Ancienne installation sans `reels/` : la racine du projet, comme avant.)
-> Dans l'app HyperFrames, une story n'a ni aperçu ni timeline : elle sort directement en MP4.
+> contient `templates/AGENT.md.tpl` ; dans l'app HyperFrames, le dossier parent de l'accueil),
+> jamais dans un Reel. Lance chaque commande depuis ce dossier : les chemins de ce skill, dont
+> `brand.config.json`, partent de là. Dans l'app, une story n'a ni aperçu ni timeline : elle sort
+> directement en MP4.
 
 > Le style des sous-titres (police, skin, position) vient de `brand.config.json` → section
 > `story`, écrite par **`/setup-stories`**. Si cette section n'existe pas encore, propose de

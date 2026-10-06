@@ -13,12 +13,19 @@ description: >-
 > avoir l'air spontané. La seule chose à poser, c'est l'allure des sous-titres — et elle est à
 > toi, pas celle d'un autre.
 
+> **Où travailler :** dans le **dossier Monteur IA**, celui qui contient `templates/AGENT.md.tpl`
+> (dans l'app HyperFrames, la conversation est ouverte dans l'accueil ou un Reel : c'est leur
+> dossier parent). `brand.config.json`, `tools/story.py` et `stories/` s'entendent depuis ce
+> dossier : lance les commandes depuis lui, et ne crée jamais de `brand.config.json` dans un Reel
+> ou dans l'accueil (l'outil ne le lirait pas, le réglage serait perdu).
+
 ## Principes de fonctionnement
 
 1. **Une question à la fois**, réponse par défaut toujours proposée, « je ne sais pas encore »
    est une réponse valable (les défauts sont bons, on peut monter tout de suite et revenir).
-2. **Source de vérité** : `brand.config.json` → section `story`. Si le fichier n'existe pas du
-   tout, le produit principal n'est pas installé : arrêter et renvoyer vers son installation.
+2. **Source de vérité** : `brand.config.json` du dossier Monteur IA → section `story`. Si ce
+   fichier n'existe pas du tout dans le dossier Monteur IA, le produit principal n'est pas
+   installé ou pas personnalisé : arrêter et renvoyer vers son installation (puis `/setup`).
 3. **Aucune écriture avant validation** : récapituler les valeurs, attendre un OK, écrire.
 4. **Le pourquoi en une phrase** quand un réglage a un enjeu, jamais un paragraphe technique.
 5. Ce skill n'installe rien.
@@ -65,8 +72,8 @@ et il faut la place d'un B-roll). Entre 1100 et 1300 pour un visage centré.
 
 ## Écriture
 
-Récapituler puis écrire dans `brand.config.json` (créer la section si absente, ne toucher à
-RIEN d'autre dans le fichier) :
+Récapituler puis écrire dans le `brand.config.json` du dossier Monteur IA (créer la section si
+absente, ne toucher à RIEN d'autre dans le fichier) :
 
 ```json
 "story": {
