@@ -6,24 +6,36 @@ parfois un plan filmé en plein écran et un petit bandeau motion. Zéro split-s
 composition HTML. Passer par HyperFrames coûterait le prix d'un Reel pour un format publié
 beaucoup plus souvent et qui vit 24 h. La doctrine complète vit dans le skill `story`.
 
-Tout se déclare dans stories/<slug>/story.json ; ce fichier ne touche JAMAIS index.html,
-compositions/ ni derush/ -> une story et un reel peuvent être montés en parallèle.
+Tout se déclare dans stories/<slug>/story.json ; ce fichier ne touche JAMAIS un Reel ni derush/
+-> une story et un reel peuvent être montés en parallèle.
+
+Monteur IA 2 (app HyperFrames) : une story se monte TECHNIQUEMENT COMME UN REEL, avec le style et
+les règles du Système Stories. stories/<slug>/ est un projet de l'app (meta.json monteurIa.lieu =
+"story", une conversation neuve par story) et son index.html une vraie composition HyperFrames,
+écrite par `compose` depuis story.json : visage (cut.mp4) et voix, plans insérés, bandeaux et
+sous-titres en éléments séparés, retouchables à la main dans l'app. L'export est natif, comme un
+Reel : bouton Export de l'app, ou `story.py render` (HyperFrames). Une retouche faite dans l'app
+n'est jamais écrasée : `compose` refuse tant qu'on ne lui dit pas --ecraser (reporter d'abord la
+retouche dans story.json). Monteur IA 1 (sans app) : rendu ffmpeg, comme avant.
 
 Les chemins (ffmpeg, whisper) et le style des sous-titres viennent de brand.config.json
 (sections `env` et `story`) : rien n'est codé en dur.
 
 Usage :
-  python3 tools/story.py init      <slug> --rush /chemin/rush.MP4
+  python3 tools/story.py init      <slug> --rush /chemin/rush.MP4 [--ouvrir]
   python3 tools/story.py silences  <slug> [--noise -40] [--d 0.18] [--no-text]
   python3 tools/story.py cut       <slug>
   python3 tools/story.py words     <slug>
   python3 tools/story.py captions  <slug>
   python3 tools/story.py preview   <slug> [--t 2.0]
+  python3 tools/story.py compose   <slug> [--ecraser]      (Monteur IA 2 : la composition de l'app)
   python3 tools/story.py render    <slug>
   python3 tools/story.py close     <slug> [--no-archive]
 """
 import argparse
 import difflib
+import hashlib
+import html as HTML
 import json
 import pathlib
 import re
@@ -36,8 +48,10 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import story_text as ST  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+APP = False   # Monteur IA 2 : chaque story est aussi un projet de l'app HyperFrames
 try:  # Monteur IA 2 (un Reel = un projet) : les stories vivent dans le dossier Monteur IA, jamais dans un Reel
     from lieux import MAISON as ROOT  # noqa: E402
+    APP = True
 except ImportError:  # Monteur IA 1 : la racine du projet
     # Windows : une sortie lue par l'agent (redirigée) est en cp1252, et un « ⚠️ » y fait planter
     # l'outil. Monteur IA 2 règle ça dans lieux.py.
@@ -136,6 +150,286 @@ def save(slug, cfg):
     (sdir(slug) / "story.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
+# ----------------------------------------------------------- projet de l'app
+COMPOSITION = """<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1080, height=1920">
+    <script src="assets/vendor/gsap.min.js"></script>
+    <!-- Story « {slug} » ({etat}), écrite par tools/story.py compose depuis story.json. Une retouche
+         faite ici, dans l'app, est gardée : compose refuse de l'écraser sans --ecraser. -->
+    <style>
+{polices}      * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+      html, body {{ width: 1080px; height: 1920px; overflow: hidden; background: #141414; }}
+      .plein {{ position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; object-fit: cover; }}
+      .repere {{ position: absolute; display: flex; align-items: center; justify-content: center; }}
+      .sous-titre {{ left: 0; width: 1080px; white-space: nowrap; font-family: "StoryCaption", sans-serif;
+        line-height: 1; color: {couleur}; }}
+      .sous-titre span {{ {skin} }}
+      .ligne {{ position: absolute; left: 120px; right: 120px; color: #a3a3a3;
+        font-family: "Avenir Next", "Segoe UI", Arial, sans-serif; font-size: 46px; line-height: 1.35; }}
+      #titre {{ top: 760px; color: #ffffff; font-weight: 800; font-size: 92px; line-height: 1.05; }}
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="{cid}" data-start="0" data-duration="{dur}" data-fps="30" data-width="1080" data-height="1920">
+{corps}
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {{}};
+      window.__timelines["{cid}"] = gsap.timeline({{ paused: true }});
+    </script>
+  </body>
+</html>
+"""
+IMAGES = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+
+
+def _lieu(dossier):
+    try:
+        return (json.loads((dossier / "meta.json").read_text(encoding="utf-8")).get("monteurIa") or {}).get("lieu")
+    except (OSError, ValueError):
+        return None
+
+
+def copie_de_l_accueil(path):
+    """Vrai si `path` est la copie qu'a faite l'app en recevant la vidéo dans l'accueil de Monteur IA."""
+    try:
+        rel = pathlib.Path(path).resolve().relative_to(ROOT.resolve())
+    except ValueError:
+        return False
+    return len(rel.parts) > 1 and _lieu(ROOT / rel.parts[0]) == "accueil"
+
+
+def _meta(slug):
+    try:
+        return json.loads((sdir(slug) / "meta.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"id": slug, "name": slug, "monteurIa": {"lieu": "story", "etat": "en-cours"}}
+
+
+def _ecrire_meta(slug, meta):
+    (sdir(slug) / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def projet(slug, etat=None):
+    """Fait de stories/<slug>/ un projet de l'app (idempotent) ; etat = "publie" à la clôture."""
+    d = sdir(slug)
+    nouveau = not (d / "meta.json").exists()
+    meta = _meta(slug)
+    if etat:
+        meta.setdefault("monteurIa", {"lieu": "story"})["etat"] = etat
+    _ecrire_meta(slug, meta)
+    if not (d / "hyperframes.json").exists() and (ROOT / "hyperframes.json").exists():
+        shutil.copy2(ROOT / "hyperframes.json", d / "hyperframes.json")
+    gsap, source = d / "assets" / "vendor" / "gsap.min.js", ROOT / "assets" / "vendor" / "gsap.min.js"
+    if not gsap.exists() and source.exists():
+        gsap.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, gsap)
+    if nouveau:   # ses consignes (CLAUDE.md, AGENTS.md, bloc LIEU_STORY du Système Stories)
+        subprocess.run(["node", "scripts/sync.mjs"], cwd=ROOT, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
+
+
+def _empreinte(texte):
+    """Empreinte d'une composition, insensible à ce que l'app réécrit sans rien changer à l'image
+    (data-hf-id posés à l'ouverture, mise en forme du HTML, écriture des entités)."""
+    t = re.sub(r'\s?data-hf-id="[^"]*"', "", HTML.unescape(texte))
+    t = re.sub(r'\s(class|style)=""', "", t).replace('=""', "")
+    t = re.sub(r"\s*/>", ">", t)
+    return hashlib.sha256(re.sub(r"\s+", "", t).lower().encode("utf-8")).hexdigest()
+
+
+def _pistes(elements, depart):
+    """Une piste par élément qui en chevauche un autre ; sinon la même (lecture plus claire)."""
+    fins, out = [], []
+    for e in elements:
+        for i, fin in enumerate(fins):
+            if e["start"] >= fin - 1e-6:
+                fins[i] = e["end"]
+                out.append(depart + i)
+                break
+        else:
+            fins.append(e["end"])
+            out.append(depart + len(fins) - 1)
+    return out, depart + max(len(fins), 1)
+
+
+def _plan(slug, i, m, cut_dur):
+    """Plan inséré pré-cadré en 1080x1920 dans assets/plans/ (le rendu ne voit que la story, et le
+    cadrage reste déterministe) ; refait seulement quand sa source ou ses réglages changent."""
+    src = pathlib.Path(_check_media(m, cut_dur))
+    d = m["end"] - m["start"]
+    cle = hashlib.sha1(f"{src.resolve()}|{src.stat().st_mtime}|{m.get('in', 0)}|{d:.3f}|{m.get('fit')}".encode()).hexdigest()[:8]
+    dossier = sdir(slug) / "assets" / "plans"
+    dossier.mkdir(parents=True, exist_ok=True)
+    out = dossier / f"plan-{i}-{cle}.mp4"
+    if not out.exists():
+        for vieux in dossier.glob(f"plan-{i}-*.mp4"):
+            vieux.unlink()
+        if m.get("fit") == "blur":
+            vf = (f"split=2[b][f];[b]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},gblur=sigma=40[bg];"
+                  f"[f]scale={W}:{H}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1")
+        else:
+            vf = f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1"
+        r = run([FFMPEG, "-y", "-ss", str(m.get("in", 0)), "-t", f"{d:.3f}", "-i", str(src), "-an",
+                 "-filter_complex", vf, "-r", FPS, "-c:v", "libx264", "-preset", "veryfast", "-crf", "16",
+                 "-g", "30", "-pix_fmt", "yuv420p", str(out)])
+        if r.returncode:
+            sys.exit(f"Plan {src.name} : préparation impossible\n{r.stderr[-1500:]}")
+    return out.relative_to(sdir(slug)).as_posix()
+
+
+def _bandeau(slug, o):
+    """Bandeau (image ou vidéo) copié dans assets/bandeaux/ ; un MOV passe en WebM avec alpha (Chrome
+    ne lit pas le ProRes). Rend (chemin dans la story, hauteur à la largeur voulue ou None)."""
+    src = pathlib.Path(o["src"]) if str(o["src"]).startswith("/") else ROOT / o["src"]
+    if not src.exists():
+        sys.exit(f"Bandeau introuvable : {src}")
+    w = o.get("w", 420)
+    dossier = sdir(slug) / "assets" / "bandeaux"
+    dossier.mkdir(parents=True, exist_ok=True)
+    if src.suffix.lower() == ".mov":
+        out = dossier / f"{src.stem}.webm"
+        if not out.exists():
+            r = run([FFMPEG, "-y", "-i", str(src), "-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-an", str(out)])
+            if r.returncode:
+                sys.exit(f"Bandeau {src.name} : conversion impossible\n{r.stderr[-1500:]}")
+    else:
+        out = dossier / src.name
+        if not out.exists() or out.stat().st_mtime < src.stat().st_mtime:
+            shutil.copy2(src, out)
+    h = None
+    try:
+        if out.suffix.lower() in IMAGES:
+            from PIL import Image
+            with Image.open(out) as im:
+                h = round(w * im.height / im.width)
+        elif out.suffix.lower() == ".svg":
+            vb = re.search(r'viewBox="\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)', out.read_text(encoding="utf-8", errors="ignore"))
+            h = round(w * float(vb.group(2)) / float(vb.group(1))) if vb else None
+        elif out.suffix.lower() in (".webm", ".mp4"):
+            dims = probe(out, "stream=width,height").split()
+            h = round(w * int(dims[1]) / int(dims[0]))
+    except (OSError, ValueError, IndexError):
+        h = None
+    return out.relative_to(sdir(slug)).as_posix(), h
+
+
+def _skin_css(st, size):
+    """Les 4 skins du /setup-stories, en CSS (mêmes réglages que story_text.render_caption)."""
+    skin = st["captionsSkin"]
+    if skin == "ombre":
+        sh = st["shadow"]
+        dx, dy = ST._shadow_offset(sh["distance"], sh["angle"])
+        flou = 2 * sh["blur"] * ST.BLUR_FULL_SCALE        # CSS : rayon = 2 x écart-type de Pillow
+        return f"text-shadow: {dx:.1f}px {dy:.1f}px {flou:.1f}px rgba(0, 0, 0, {sh['opacity']});"
+    if skin == "contour":
+        trait = max(2, size // 18)
+        return f"-webkit-text-stroke: {2 * trait}px rgba(0, 0, 0, 0.9); paint-order: stroke fill;"
+    if skin in ("plaque", "bloc"):
+        r, g, b, _ = ST._hex(st["plateColor"])
+        alpha = 0.67 if skin == "plaque" else 1
+        lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        texte = "" if skin == "plaque" or lum <= 140 else " color: #101010;"
+        rayon = int(size * 0.22) if skin == "plaque" else 0
+        return (f"background: rgba({r}, {g}, {b}, {alpha}); padding: {int(size * 0.24)}px {int(size * 0.42)}px; "
+                f"border-radius: {rayon}px;{texte}")
+    sys.exit(f"Skin de sous-titre inconnu : « {skin} » (ombre | contour | plaque | bloc). Relance /setup-stories.")
+
+
+def _polices(slug, st):
+    """La police des sous-titres, copiée dans la story (le rendu ne voit que ce dossier)."""
+    src = ST.font_path(st)
+    dossier = sdir(slug) / "assets" / "fonts"
+    dossier.mkdir(parents=True, exist_ok=True)
+    if not (dossier / src.name).exists():
+        shutil.copy2(src, dossier / src.name)
+    fmt = {".ttf": "truetype", ".otf": "opentype", ".woff2": "woff2", ".woff": "woff"}.get(src.suffix.lower(), "truetype")
+    return (f'      @font-face {{ font-family: "StoryCaption"; src: url("assets/fonts/{src.name}") format("{fmt}"); '
+            f'font-display: block; }}\n')
+
+
+def composer(slug, publiee=False, ecraser=False, auto=True):
+    """index.html = la composition de la story (Monteur IA 2). Rend False si une retouche faite dans
+    l'app a été gardée (rien d'écrit)."""
+    if not APP:
+        return True
+    projet(slug)
+    d = sdir(slug)
+    page = d / "index.html"
+    meta = _meta(slug)
+    connue = (meta.get("monteurIa") or {}).get("composition")
+    if page.exists() and connue and not ecraser and not publiee and _empreinte(page.read_text(encoding="utf-8")) != connue:
+        msg = ("index.html a été retouché dans l'app : retouche gardée, composition NON réécrite. Reporte la "
+               "retouche dans story.json (timings, textes), puis `story.py compose " + slug + " --ecraser`.")
+        if auto:
+            print("⚠️  " + msg)
+            return False
+        sys.exit(msg)
+    cfg = load(slug)
+    cut = d / "cut.mp4"
+    st = story_style()
+    corps, etat = [], "vignette d'attente"
+    if publiee or not cut.exists():
+        dur = 5
+        texte = ("Story publiée : sa vidéo est dans Vidéos/stories-publiees." if publiee
+                 else "Story en préparation : la composition arrive après le cut.")
+        corps = [f'      <h1 id="titre" class="ligne clip" data-start="0" data-duration="5" data-track-index="0">{HTML.escape(slug)}</h1>',
+                 f'      <p id="etat" class="ligne clip" data-start="0" data-duration="5" data-track-index="1" style="top: 980px">{texte}</p>']
+        etat = "publiée" if publiee else etat
+    else:
+        dur = round(float(probe(cut)), 3)
+        corps = [f'      <video id="visage" class="plein clip" src="cut.mp4" muted playsinline data-start="0" data-duration="{dur}" data-track-index="0"></video>',
+                 f'      <audio id="voix" src="cut.mp4" data-start="0" data-duration="{dur}" data-track-index="1"></audio>']
+        medias = sorted(cfg.get("media", []), key=lambda m: m["start"])
+        pistes, suite = _pistes(medias, 2)
+        for i, (m, piste) in enumerate(zip(medias, pistes)):
+            src = _plan(slug, i, m, dur)
+            corps.append(f'      <video id="plan-{i}" class="plein clip" src="{src}" muted playsinline data-start="{m["start"]:.3f}" '
+                         f'data-duration="{m["end"] - m["start"]:.3f}" data-track-index="{piste}"></video>')
+        bandeaux = sorted(cfg.get("overlays", []), key=lambda o: o["start"])
+        pistes, suite = _pistes(bandeaux, suite)
+        for i, (o, piste) in enumerate(zip(bandeaux, pistes)):
+            src, h = _bandeau(slug, o)
+            w, y = o.get("w", 420), o.get("y", 300)
+            temps = f'data-start="{o["start"]:.3f}" data-duration="{o["end"] - o["start"]:.3f}" data-track-index="{piste}"'
+            if src.endswith((".webm", ".mp4")):
+                corps.append(f'      <video id="bandeau-{i}" class="clip" src="{src}" muted playsinline {temps} '
+                             f'style="position: absolute; left: {(W - w) // 2}px; top: {y - (h or 0) // 2}px; width: {w}px"></video>')
+            elif h:
+                corps.append(f'      <img id="bandeau-{i}" class="clip" src="{src}" alt="" {temps} '
+                             f'style="position: absolute; left: {(W - w) // 2}px; top: {y - h // 2}px; width: {w}px">')
+            else:   # hauteur illisible : cadre de la largeur voulue, carré, image centrée dedans
+                corps.append(f'      <div id="bandeau-{i}" class="repere clip" {temps} style="left: {(W - w) // 2}px; '
+                             f'top: {y - w // 2}px; width: {w}px; height: {w}px"><img src="{src}" alt="" style="width: {w}px"></div>')
+        for i, c in enumerate(cfg.get("captions", [])):
+            txt = c["t"].upper() if cfg.get("caption_case", st.get("captionCase")) == "upper" else c["t"]
+            size, y = c.get("size", cfg["caption_size"]), c.get("y", cfg["caption_y"])
+            if ST.measure(txt, size, st)[0] > ST.MAX_TEXT_W:
+                sys.exit(f"Sous-titre trop large : « {txt} » : re-couper (toujours une seule ligne).")
+            corps.append(f'      <div id="st-{i}" class="repere sous-titre clip" data-start="{c["start"]:.3f}" '
+                         f'data-duration="{c["end"] - c["start"]:.3f}" data-track-index="{suite}" '
+                         f'style="top: {y - size}px; height: {2 * size}px; font-size: {size}px">'
+                         f'<span>{HTML.escape(txt, quote=False)}</span></div>')
+        etat = f"{len(medias)} plan(s), {len(bandeaux)} bandeau(x), {len(cfg.get('captions', []))} sous-titres"
+    taille = cfg.get("caption_size", st["captionSize"])
+    contenu = COMPOSITION.format(slug=slug, cid=f"story-{slug}", dur=dur, etat=etat, corps="\n".join(corps),
+                                 polices=_polices(slug, st), couleur=st["captionColor"], skin=_skin_css(st, taille))
+    page.write_text(contenu, encoding="utf-8")
+    meta = _meta(slug)
+    meta.setdefault("monteurIa", {"lieu": "story"})["composition"] = _empreinte(contenu)
+    _ecrire_meta(slug, meta)
+    return True
+
+
+def ouvrir(slug):
+    r = subprocess.run(["node", "scripts/app-hyperframes.mjs", "ouvrir", str(sdir(slug))], cwd=ROOT,
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    print("-> " + ((r.stdout or r.stderr).strip() or "ouverte dans l'app HyperFrames"))
+
+
 def run(cmd, **kw):
     return subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", **kw)
 
@@ -168,6 +462,12 @@ def cmd_init(a):
     rush = pathlib.Path(a.rush).expanduser().resolve()
     if not rush.exists():
         sys.exit(f"Rush introuvable : {rush}")
+    if copie_de_l_accueil(rush):
+        # Copie faite par l'app dans l'accueil : elle part dans la story (effacée à la clôture).
+        cible = d / f"rush{rush.suffix}"
+        shutil.move(str(rush), str(cible))
+        rush = cible
+        print(f"Vidéo glissée dans l'accueil -> rangée dans la story : {cible}")
     info = probe(rush, "stream=index,codec_type,codec_name,width,height,color_transfer")
     print(f"Rush : {rush}\nDurée : {probe(rush)} s\n{info}")
     if "color_transfer=arib-std-b67" in info or "color_transfer=smpte2084" in info:
@@ -176,7 +476,12 @@ def cmd_init(a):
     cfg = {"slug": a.slug, "rush": str(rush), **DEFAULTS,
            "islands": [], "captions": [], "media": [], "overlays": []}
     save(a.slug, cfg)
+    composer(a.slug)
     print(f"\n-> {d/'story.json'}  (remplir `islands` après `story.py silences {a.slug}`)")
+    if APP:
+        print(f"-> projet de l'app HyperFrames : stories/{a.slug}/ (une conversation neuve pour cette story)")
+        if a.ouvrir:
+            ouvrir(a.slug)
 
 
 # --------------------------------------------------------------------- silences
@@ -247,6 +552,7 @@ def cmd_cut(a):
     if r.returncode:
         sys.exit(r.stderr[-1800:])
     print(f"-> {out}  ({probe(out)} s)")
+    composer(a.slug)
 
 
 # --------------------------------------------------------------------- words
@@ -372,6 +678,7 @@ def cmd_captions(a):
     save(a.slug, cfg)
     print(f"{len(caps)} sous-titres -> stories/{a.slug}/story.json (clé `captions`)")
     print("⚠️  1er jet SANS conscience grammaticale : re-couper par unité avant de livrer.\n")
+    composer(a.slug)
     for c in caps:
         print(f"  {c['start']:6.2f} -> {c['end']:6.2f}  {c['t']}")
 
@@ -418,7 +725,38 @@ def _check_media(m, cut_dur):
     return str(src)
 
 
+def cmd_compose(a):
+    load(a.slug)
+    if not APP:
+        sys.exit("`compose` sert l'app HyperFrames (Monteur IA 2) ; ici, `render` monte en ffmpeg.")
+    composer(a.slug, ecraser=a.ecraser, auto=False)
+    print(f"-> stories/{a.slug}/index.html : composition à jour (ouvre la story dans l'app pour la voir)")
+
+
+def rendu_natif(a):
+    """Monteur IA 2 : la story s'exporte comme un Reel, depuis sa composition (retouches de l'app
+    comprises). Même résultat que le bouton Export de l'app."""
+    cfg = load(a.slug)
+    d = sdir(a.slug)
+    if not (d / "cut.mp4").exists():
+        sys.exit("cut.mp4 manquant : lance `story.py cut` d'abord.")
+    composer(a.slug)
+    out = d / f"story_{cfg['slug']}_FINAL.mp4"
+    r = subprocess.run(["npx", "--yes", "hyperframes", "render", "-o", str(out)], cwd=d, capture_output=True,
+                       text=True, encoding="utf-8", errors="replace", shell=sys.platform == "win32")
+    if r.returncode or not out.exists():
+        sys.exit("Rendu HyperFrames impossible :\n" + (r.stdout + r.stderr)[-2500:])
+    dl = pathlib.Path.home() / "Downloads" / out.name
+    try:
+        shutil.copy2(out, dl)
+    except OSError:
+        dl = None
+    print(f"-> {out}  ({probe(out)} s)" + (f"\n-> {dl}" if dl else ""))
+
+
 def cmd_render(a):
+    if APP:
+        return rendu_natif(a)
     cfg = load(a.slug)
     cut = sdir(a.slug) / "cut.mp4"
     if not cut.exists():
@@ -521,6 +859,8 @@ def cmd_close(a):
     if not d.exists():
         sys.exit(f"Aucune story « {a.slug} ».")
     master = next(iter(sorted(d.glob("story_*_FINAL.mp4"))), None)
+    if not master and (d / "renders").is_dir():   # export fait avec le bouton Export de l'app
+        master = max((p for p in (d / "renders").glob("*.mp4")), key=lambda p: p.stat().st_mtime, default=None)
     if master and not a.no_archive:
         arch = pathlib.Path.home() / "Movies" / "stories-publiees" / a.slug
         arch.mkdir(parents=True, exist_ok=True)
@@ -528,9 +868,28 @@ def cmd_close(a):
         print(f"master archivé -> {arch / master.name}")
     elif not master:
         print("aucun master trouvé (rien à archiver)")
-    size = sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
-    shutil.rmtree(d)
-    print(f"stories/{a.slug}/ supprimé ({size/1e6:.0f} Mo libérés)")
+    if not APP:
+        size = sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
+        shutil.rmtree(d)
+        print(f"stories/{a.slug}/ supprimé ({size/1e6:.0f} Mo libérés)")
+        return
+    # Monteur IA 2 : le projet de l'app reste (story.json + vignette « publiée »), seuls les médias partent.
+    rush = pathlib.Path(load(a.slug).get("rush", ""))
+    garder = {"story.json", "meta.json", "hyperframes.json", "CLAUDE.md", "AGENTS.md", ".hyperframes", ".thumbnails"}
+    size = 0
+    for p in d.iterdir():
+        if p.name in garder:
+            continue
+        size += p.stat().st_size if p.is_file() else sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
+        p.unlink() if p.is_file() or p.is_symlink() else shutil.rmtree(p)
+    if str(rush) and copie_de_l_accueil(rush) and rush.is_file():
+        size += rush.stat().st_size
+        rush.unlink()
+        print(f"copie de la vidéo laissée dans l'accueil effacée : {rush.name}")
+    projet(a.slug, etat="publie")
+    composer(a.slug, publiee=True)
+    print(f"stories/{a.slug}/ vidé ({size/1e6:.0f} Mo libérés) ; son projet reste dans l'app, marqué publié "
+          "(l'archiver dans l'app pour le retirer de la liste)")
 
 
 # ----------------------------------------------------------------------- cli
@@ -538,18 +897,21 @@ ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDe
 sub = ap.add_subparsers(dest="cmd", required=True)
 for name, fn in [("init", cmd_init), ("silences", cmd_silences), ("cut", cmd_cut),
                  ("words", cmd_words), ("captions", cmd_captions),
-                 ("preview", cmd_preview), ("render", cmd_render), ("close", cmd_close)]:
+                 ("preview", cmd_preview), ("compose", cmd_compose), ("render", cmd_render), ("close", cmd_close)]:
     s = sub.add_parser(name)
     s.add_argument("slug")
     s.set_defaults(fn=fn)
     if name == "init":
         s.add_argument("--rush", required=True)
+        s.add_argument("--ouvrir", action="store_true", help="ouvre la story dans l'app HyperFrames")
     if name == "silences":
         s.add_argument("--noise", type=float, default=-40)
         s.add_argument("--d", type=float, default=0.18)
         s.add_argument("--no-text", action="store_true")
     if name == "close":
         s.add_argument("--no-archive", action="store_true")
+    if name == "compose":
+        s.add_argument("--ecraser", action="store_true", help="réécrit la composition même retouchée dans l'app")
     if name == "preview":
         s.add_argument("--t", type=float, default=2.0)
         s.add_argument("--text", default=None)

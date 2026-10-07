@@ -49,6 +49,10 @@ Trois phrases à dire à ton monteur, selon où tu en es :
 
 Le résultat : un MP4 1080×1920 prêt à poster, copié dans ton dossier Téléchargements.
 
+Dans l'app HyperFrames, chaque story a son propre projet, monté comme un Reel : une conversation
+neuve, ta story dans la timeline (sous-titres, plans et bandeaux séparés) pour la retoucher à la
+main ou donner tes retours, et le bouton Export pour la sortir.
+
 ## FAQ
 
 **En quoi c'est différent de mes Reels ?**

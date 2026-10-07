@@ -9,7 +9,18 @@ Reel.
 - « une story », « monte ma story », « monta esta story » → skill **`story`**, et rien d'autre.
 - « un script de story », « escríbeme un guion de story » → skill **`story-script`**.
 - `/setup-stories`, « personnaliser mes stories » → skill **`setup-stories`**.
-- Rappels : visage plein écran, jamais de split-screen ni de composition HTML (tout en ffmpeg via
-  `tools/story.py`). En cas de doute : « c'est pour un Reel ou une story ? »
-
+- Rappels : visage plein écran, jamais de split-screen ni de motion de Reel ; tout passe par
+  `tools/story.py`. En cas de doute : « c'est pour un Reel ou une story ? »
+{{#LIEU_MAISON}}- Une story = un projet de l'app HyperFrames (une conversation neuve par story) : `python3
+  tools/story.py init <slug> --rush "<vidéo>" --ouvrir` (slug court, ex. `story-offre-1`).
+{{/LIEU_MAISON}}{{#LIEU_ACCUEIL}}- Story demandée ici : `python3 ../tools/story.py init <slug> --rush "<vidéo glissée>" --ouvrir`
+  (slug court, ex. `story-offre-1` ; la vidéo part dans la story), puis dis : « Ta story est dans la
+  liste des projets : ouvre-la. » Ne la monte pas dans l'accueil.
+{{/LIEU_ACCUEIL}}{{#LIEU_REEL}}- Une story ne se monte jamais dans un Reel : `python3 ../../tools/story.py init <slug> --rush "<vidéo>" --ouvrir`.
+{{/LIEU_REEL}}{{#LIEU_STORY}}- 📍 **Tu es dans une story** (le nom de ce dossier est son slug), montée techniquement comme un Reel
+  avec le style et les règles du skill `story` : commandes `python3 ../../tools/story.py <commande> <slug>`.
+  `index.html` est sa composition (visage, voix, plans, bandeaux, sous-titres), écrite par `compose` depuis
+  `story.json`. Une retouche faite dans l'app est gardée : `compose` refuse de l'écraser ; reporte-la dans
+  `story.json`, puis `compose --ecraser`. Export : bouton Export de l'app, ou `story.py render`.
+{{/LIEU_STORY}}
 <!-- END EXTENSION: systeme-stories -->

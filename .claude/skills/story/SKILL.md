@@ -11,15 +11,21 @@ description: >-
 # Story Instagram — le montage
 
 > ⚠️ **Ce n'est PAS le pipeline Reel.** Une story se publie souvent, vit 24 h et n'a presque pas
-> de motion. Elle ne passe **jamais** par HyperFrames, `index.html`, `compositions/` ou le studio.
-> Tout se fait en ffmpeg via `tools/story.py`. Si tu te retrouves à écrire du HTML, tu t'es trompé
+> de motion : ni split-screen, ni sections de motion, ni `compositions/`. Tout passe par
+> `tools/story.py`, qui écrit lui-même la composition de la story (Monteur IA 2) ou la monte en ffmpeg
+> (Monteur IA 1). Si tu te retrouves à écrire du HTML, tu t'es trompé
 > de pipeline (sauf porte de sortie §8).
 
 > **Où travailler :** une story vit dans `stories/<slug>/` du **dossier Monteur IA** (celui qui
 > contient `templates/AGENT.md.tpl` ; dans l'app HyperFrames, le dossier parent de l'accueil),
-> jamais dans un Reel. Lance chaque commande depuis ce dossier : les chemins de ce skill, dont
-> `brand.config.json`, partent de là. Dans l'app, une story n'a ni aperçu ni timeline : elle sort
-> directement en MP4.
+> jamais dans un Reel. Les chemins de ce skill, dont `brand.config.json`, partent de ce dossier.
+> **Dans l'app HyperFrames (Monteur IA 2), une story se monte techniquement comme un Reel** : un
+> projet par story (`init --ouvrir`, conversation neuve), et un `index.html` qui est sa vraie
+> composition (visage, voix, plans insérés, bandeaux, sous-titres en éléments séparés), écrite par
+> `story.py compose` depuis `story.json` (aussi après `cut` et `captions`). Le créateur peut la
+> retoucher à la main dans l'app : `compose` ne l'écrase jamais sans `--ecraser` (reporter d'abord la
+> retouche dans `story.json`). Export natif : bouton Export de l'app, ou `story.py render`. Depuis
+> la story, les commandes s'écrivent `python3 ../../tools/story.py …`.
 
 > Le style des sous-titres (police, skin, position) vient de `brand.config.json` → section
 > `story`, écrite par **`/setup-stories`**. Si cette section n'existe pas encore, propose de
@@ -65,20 +71,21 @@ stories/<slug>/
   story_<slug>_FINAL.mp4
 ```
 
-`tools/story.py` ne touche **jamais** `index.html`, `compositions/`, `derush/` ni
-`assets/video/`. Une story et un reel peuvent donc être montés en parallèle sans se marcher
+`tools/story.py` ne touche **jamais** un Reel, `derush/` ni `assets/video/` (son seul `index.html`
+est la composition de la story). Une story et un reel peuvent donc être montés en parallèle sans se marcher
 dessus.
 
-Une fois la story postée : `python3 tools/story.py close <slug>` — archive le master dans
-`~/Movies/stories-publiees/<slug>/` puis supprime le dossier de travail (compter ~200 Mo par
-story). `--no-archive` pour ne rien garder du tout.
+Une fois la story postée : `python3 tools/story.py close <slug>` archive le master dans
+`~/Movies/stories-publiees/<slug>/` puis efface le travail (compter ~200 Mo par story). En Monteur
+IA 2, le projet de l'app reste, marqué publié (seuls les médias partent) ; en Monteur IA 1, le
+dossier est supprimé. `--no-archive` pour ne rien garder du tout.
 
 ---
 
 ## 3. Le pipeline (7 commandes)
 
 ```bash
-python3 tools/story.py init     <slug> --rush ~/Downloads/rush.MP4
+python3 tools/story.py init     <slug> --rush ~/Downloads/rush.MP4 --ouvrir   # projet de l'app
 python3 tools/story.py silences <slug>          # îlots NUMÉROTÉS + transcription par îlot
 python3 tools/story.py cut      <slug>          # après avoir rempli `islands`
 python3 tools/story.py words    <slug>          # transcription mot-à-mot, prise par prise
