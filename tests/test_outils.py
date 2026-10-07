@@ -167,5 +167,27 @@ class StoryCommeUnReel(unittest.TestCase):
         self.assertIn("Story publiée", (d / "index.html").read_text(encoding="utf-8"))
 
 
+    def test_script_d_abord_puis_video(self):
+        """Dans l'app, un script se brainstorme dans le projet de la story : init --brief sans vidéo,
+        puis la vidéo arrive au tournage par le même init, sans rien perdre."""
+        d = self.maison / "stories" / "idee"
+        self.story("init", "idee", "--brief", "Teaser de mon offre, ton détendu")
+        self.assertIn("Teaser de mon offre", (d / "brief.md").read_text(encoding="utf-8"))
+        self.assertIn("Script de la story en cours", (d / "index.html").read_text(encoding="utf-8"))
+        self.assertEqual(json.loads((d / "meta.json").read_text(encoding="utf-8"))["monteurIa"]["lieu"], "story")
+        r = self.story("silences", "idee", check=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("Pas encore de vidéo", r.stderr + r.stdout)
+        cfg = json.loads((d / "story.json").read_text(encoding="utf-8"))
+        cfg["caption_size"] = 60   # un réglage pris pendant le script
+        (d / "story.json").write_text(json.dumps(cfg), encoding="utf-8")
+        self.story("init", "idee", "--rush", str(self.rush))
+        cfg = json.loads((d / "story.json").read_text(encoding="utf-8"))
+        self.assertEqual((pathlib.Path(cfg["rush"]).name, cfg["caption_size"]), ("rush.mp4", 60))
+        self.assertTrue((d / "brief.md").exists())
+        r = self.story("init", "idee", "--rush", str(self.plan), check=False)
+        self.assertNotEqual(r.returncode, 0, "une story qui a sa vidéo ne se réinitialise pas")
+
+
 if __name__ == "__main__":
     unittest.main()

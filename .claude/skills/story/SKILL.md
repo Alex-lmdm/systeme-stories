@@ -86,6 +86,7 @@ dossier est supprimé. `--no-archive` pour ne rien garder du tout.
 
 ```bash
 python3 tools/story.py init     <slug> --rush ~/Downloads/rush.MP4 --ouvrir   # projet de l'app
+python3 tools/story.py init     <slug> --brief "<demande>" --ouvrir  # app : script d'abord, puis --rush au tournage
 python3 tools/story.py silences <slug>          # îlots NUMÉROTÉS + transcription par îlot
 python3 tools/story.py cut      <slug>          # après avoir rempli `islands`
 python3 tools/story.py words    <slug>          # transcription mot-à-mot, prise par prise

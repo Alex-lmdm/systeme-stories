@@ -23,6 +23,7 @@ Les chemins (ffmpeg, whisper) et le style des sous-titres viennent de brand.conf
 
 Usage :
   python3 tools/story.py init      <slug> --rush /chemin/rush.MP4 [--ouvrir]
+  python3 tools/story.py init      <slug> --brief "<demande>" --ouvrir   (app : script d'abord, vidéo plus tard)
   python3 tools/story.py silences  <slug> [--noise -40] [--d 0.18] [--no-text]
   python3 tools/story.py cut       <slug>
   python3 tools/story.py words     <slug>
@@ -375,7 +376,8 @@ def composer(slug, publiee=False, ecraser=False, auto=True):
     if publiee or not cut.exists():
         dur = 5
         texte = ("Story publiée : sa vidéo est dans Vidéos/stories-publiees." if publiee
-                 else "Story en préparation : la composition arrive après le cut.")
+                 else "Story en préparation : la composition arrive après le cut." if cfg.get("rush")
+                 else "Script de la story en cours : la vidéo arrive au tournage.")
         corps = [f'      <h1 id="titre" class="ligne clip" data-start="0" data-duration="5" data-track-index="0">{HTML.escape(slug)}</h1>',
                  f'      <p id="etat" class="ligne clip" data-start="0" data-duration="5" data-track-index="1" style="top: 980px">{texte}</p>']
         etat = "publiée" if publiee else etat
@@ -469,37 +471,66 @@ def takes_of(cfg):
 
 # ------------------------------------------------------------------------- init
 def cmd_init(a):
+    """Crée la story. Dans l'app, un script se brainstorme dans le projet de la story : `--brief` sans
+    vidéo crée le projet tout de suite ; la vidéo s'ajoute au tournage, par le même `init --rush`."""
     d = sdir(a.slug)
+    existante = (d / "story.json").exists()
+    if existante and load(a.slug).get("rush"):
+        sys.exit(f"La story « {a.slug} » a déjà sa vidéo. Choisis un autre slug pour une nouvelle story.")
+    if not a.rush and not a.brief:
+        sys.exit("Donne la vidéo (--rush) ou, pour écrire le script d'abord, la demande (--brief).")
     d.mkdir(parents=True, exist_ok=True)
-    rush = pathlib.Path(a.rush).expanduser().resolve()
-    if not rush.exists():
-        sys.exit(f"Rush introuvable : {rush}")
-    if copie_de_l_accueil(rush):
-        # Copie faite par l'app dans l'accueil : elle part dans la story (effacée à la clôture).
-        cible = d / f"rush{rush.suffix}"
-        shutil.move(str(rush), str(cible))
-        rush = cible
-        print(f"Vidéo glissée dans l'accueil -> rangée dans la story : {cible}")
-    info = probe(rush, "stream=index,codec_type,codec_name,width,height,color_transfer")
-    print(f"Rush : {rush}\nDurée : {probe(rush)} s\n{info}")
-    if "color_transfer=arib-std-b67" in info or "color_transfer=smpte2084" in info:
-        print("⚠️  Rush en HDR : le rendu SDR délavera les couleurs. Filmer en SDR, ou "
-              "transcoder d'abord (voir skill story, section pièges).")
-    cfg = {"slug": a.slug, "rush": str(rush), **DEFAULTS,
-           "islands": [], "captions": [], "media": [], "overlays": []}
+    if a.brief and a.brief.strip():
+        brief = d / "brief.md"
+        debut = brief.read_text(encoding="utf-8") if brief.exists() else "# Brief\n\n"
+        brief.write_text(debut + f"Demande du client :\n\n{a.brief.strip()}\n\n", encoding="utf-8")
+        print(f"Demande notée dans stories/{a.slug}/brief.md (lue en début de conversation de la story)")
+    rush = None
+    if a.rush:
+        rush = pathlib.Path(a.rush).expanduser().resolve()
+        if not rush.exists():
+            sys.exit(f"Rush introuvable : {rush}")
+        if copie_de_l_accueil(rush):
+            # Copie faite par l'app dans l'accueil : elle part dans la story (effacée à la clôture).
+            cible = d / f"rush{rush.suffix}"
+            shutil.move(str(rush), str(cible))
+            rush = cible
+            print(f"Vidéo glissée dans l'accueil -> rangée dans la story : {cible}")
+        info = probe(rush, "stream=index,codec_type,codec_name,width,height,color_transfer")
+        print(f"Rush : {rush}\nDurée : {probe(rush)} s\n{info}")
+        if "color_transfer=arib-std-b67" in info or "color_transfer=smpte2084" in info:
+            print("⚠️  Rush en HDR : le rendu SDR délavera les couleurs. Filmer en SDR, ou "
+                  "transcoder d'abord (voir skill story, section pièges).")
+    if existante:   # story créée pour son script : la vidéo arrive, le reste est gardé
+        cfg = json.loads((d / "story.json").read_text(encoding="utf-8"))
+        cfg["rush"] = str(rush) if rush else cfg.get("rush")
+    else:
+        cfg = {"slug": a.slug, "rush": str(rush) if rush else None, **DEFAULTS,
+               "islands": [], "captions": [], "media": [], "overlays": []}
     save(a.slug, cfg)
     composer(a.slug)
-    print(f"\n-> {d/'story.json'}  (remplir `islands` après `story.py silences {a.slug}`)")
+    if rush:
+        print(f"\n-> {d/'story.json'}  (remplir `islands` après `story.py silences {a.slug}`)")
+    else:
+        print(f"\n-> stories/{a.slug}/ : pas encore de vidéo, on commence par le script (skill story-script) ; "
+              f"une fois tournée : story.py init {a.slug} --rush <vidéo>")
     if APP:
         print(f"-> projet de l'app HyperFrames : stories/{a.slug}/ (une conversation neuve pour cette story)")
         if a.ouvrir:
             ouvrir(a.slug)
 
 
+def rush_de(cfg):
+    if not cfg.get("rush"):
+        sys.exit(f"Pas encore de vidéo pour « {cfg['slug']} » : une fois tournée, "
+                 f"story.py init {cfg['slug']} --rush <vidéo> (le script et les réglages sont gardés).")
+    return cfg["rush"]
+
+
 # --------------------------------------------------------------------- silences
 def cmd_silences(a):
     cfg = load(a.slug)
-    src = cfg["rush"]
+    src = rush_de(cfg)
     model = whisper_model()
     with tempfile.TemporaryDirectory() as tmp:
         wav = pathlib.Path(tmp) / "a.wav"
@@ -557,7 +588,7 @@ def cmd_cut(a):
         cin += f"[v{i}][a{i}]"
     fg = "".join(parts) + f"{cin}concat=n={len(cfg['islands'])}:v=1:a=1[v][a]"
     print(f"Prises : {len(cfg['islands'])} | durée estimée : {kept:.2f} s")
-    r = run([FFMPEG, "-y", "-i", cfg["rush"], "-filter_complex", fg,
+    r = run([FFMPEG, "-y", "-i", rush_de(cfg), "-filter_complex", fg,
              "-map", "[v]", "-map", "[a]", "-r", FPS,
              "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", "-pix_fmt", "yuv420p",
              "-c:a", "aac", "-b:a", "192k", str(out)])
@@ -889,7 +920,7 @@ def cmd_close(a):
         print(f"stories/{a.slug}/ supprimé ({size/1e6:.0f} Mo libérés)")
         return
     # Monteur IA 2 : le projet de l'app reste (story.json + vignette « publiée »), seuls les médias partent.
-    rush = pathlib.Path(load(a.slug).get("rush", ""))
+    rush = pathlib.Path(load(a.slug).get("rush") or "")
     garder = {"story.json", "meta.json", "hyperframes.json", "CLAUDE.md", "AGENTS.md", ".hyperframes", ".thumbnails"}
     size = 0
     for p in d.iterdir():
@@ -917,7 +948,8 @@ for name, fn in [("init", cmd_init), ("silences", cmd_silences), ("cut", cmd_cut
     s.add_argument("slug")
     s.set_defaults(fn=fn)
     if name == "init":
-        s.add_argument("--rush", required=True)
+        s.add_argument("--rush", help="la vidéo brute (absente : story créée pour écrire son script d'abord)")
+        s.add_argument("--brief", help="la demande du client (idées, liens, consignes), notée dans brief.md")
         s.add_argument("--ouvrir", action="store_true", help="ouvre la story dans l'app HyperFrames")
     if name == "silences":
         s.add_argument("--noise", type=float, default=-40)
