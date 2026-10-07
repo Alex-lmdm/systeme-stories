@@ -407,8 +407,6 @@ def composer(slug, publiee=False, ecraser=False, auto=True):
         for i, c in enumerate(cfg.get("captions", [])):
             txt = c["t"].upper() if cfg.get("caption_case", st.get("captionCase")) == "upper" else c["t"]
             size, y = c.get("size", cfg["caption_size"]), c.get("y", cfg["caption_y"])
-            if ST.measure(txt, size, st)[0] > ST.MAX_TEXT_W:
-                sys.exit(f"Sous-titre trop large : « {txt} » : re-couper (toujours une seule ligne).")
             corps.append(f'      <div id="st-{i}" class="repere sous-titre clip" data-start="{c["start"]:.3f}" '
                          f'data-duration="{c["end"] - c["start"]:.3f}" data-track-index="{suite}" '
                          f'style="top: {y - size}px; height: {2 * size}px; font-size: {size}px">'
@@ -421,7 +419,21 @@ def composer(slug, publiee=False, ecraser=False, auto=True):
     meta = _meta(slug)
     meta.setdefault("monteurIa", {"lieu": "story"})["composition"] = _empreinte(contenu)
     _ecrire_meta(slug, meta)
+    trop = trop_larges(cfg, st)
+    if trop and not publiee:
+        print("⚠️  Sous-titre(s) trop large(s) (> 880 px), à re-couper avant l'export : " + " | ".join(trop))
     return True
+
+
+def trop_larges(cfg, st=None):
+    """Sous-titres qui ne tiennent pas sur une ligne : l'app les montre (à re-couper), l'export les refuse."""
+    st = st or story_style()
+    out = []
+    for c in cfg.get("captions", []):
+        txt = c["t"].upper() if cfg.get("caption_case", st.get("captionCase")) == "upper" else c["t"]
+        if ST.measure(txt, c.get("size", cfg["caption_size"]), st)[0] > ST.MAX_TEXT_W:
+            out.append(txt)
+    return out
 
 
 def ouvrir(slug):
@@ -740,6 +752,9 @@ def rendu_natif(a):
     d = sdir(a.slug)
     if not (d / "cut.mp4").exists():
         sys.exit("cut.mp4 manquant : lance `story.py cut` d'abord.")
+    trop = trop_larges(cfg)
+    if trop:
+        sys.exit("Sous-titre(s) trop large(s), à re-couper avant l'export (toujours une seule ligne) : " + " | ".join(trop))
     composer(a.slug)
     out = d / f"story_{cfg['slug']}_FINAL.mp4"
     r = subprocess.run(["npx", "--yes", "hyperframes", "render", "-o", str(out)], cwd=d, capture_output=True,

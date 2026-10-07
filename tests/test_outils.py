@@ -148,6 +148,17 @@ class StoryCommeUnReel(unittest.TestCase):
         self.story("compose", "essai", "--ecraser")
         self.assertNotIn('data-start="1.200"', (d / "index.html").read_text(encoding="utf-8"))
 
+        # Un sous-titre trop large : la composition s'écrit (l'app le montre), l'export le refuse.
+        cfg = json.loads((d / "story.json").read_text(encoding="utf-8"))
+        cfg["captions"].append({"t": "Un sous-titre beaucoup trop long pour une seule ligne", "start": 2.0, "end": 2.3})
+        (d / "story.json").write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+        sortie = self.story("compose", "essai", "--ecraser").stdout
+        self.assertIn("trop large", sortie)
+        self.assertIn("beaucoup trop long", (d / "index.html").read_text(encoding="utf-8"))
+        r = self.story("render", "essai", check=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("trop large", r.stderr + r.stdout)
+
         shutil.copy2(d / "cut.mp4", d / "story_essai_FINAL.mp4")
         self.story("close", "essai", "--no-archive")
         self.assertEqual(sorted(p.name for p in d.iterdir()),
