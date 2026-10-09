@@ -10,6 +10,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -138,15 +139,34 @@ class StoryCommeUnReel(unittest.TestCase):
         # L'app pose ses data-hf-id : ce n'est pas une retouche.
         (d / "index.html").write_text(page.replace('<span>', '<span data-hf-id="hf-1">'), encoding="utf-8")
         self.story("compose", "essai")
-        # Une vraie retouche (sous-titre déplacé dans l'app) n'est pas écrasée sans --ecraser.
-        retouche = (d / "index.html").read_text(encoding="utf-8").replace('data-start="1.000"', 'data-start="1.200"')
+        # Une vraie retouche dans l'app (sous-titre retimé, texte changé, emoji ajouté) est REPORTÉE
+        # dans story.json avant la réécriture : rien n'est perdu, jamais besoin de --ecraser.
+        page = (d / "index.html").read_text(encoding="utf-8")
+        retouche = (page.replace('data-start="1.000"', 'data-start="1.200"')
+                    .replace('<span>Et voilà</span>', '<span data-hf-id="hf-9">Et voilà 🎉</span>'))
         (d / "index.html").write_text(retouche, encoding="utf-8")
+        r = self.story("compose", "essai")
+        self.assertIn("reportées dans story.json", r.stdout)
+        cfg = json.loads((d / "story.json").read_text(encoding="utf-8"))
+        self.assertEqual((cfg["captions"][1]["start"], cfg["captions"][1]["t"]), (1.2, "Et voilà 🎉"))
+        page = (d / "index.html").read_text(encoding="utf-8")
+        self.assertIn('data-start="1.200"', page)
+        self.assertIn("Et voilà 🎉", page)
+        # Un plan supprimé dans l'app disparaît de story.json ; un plan décalé garde son point d'entrée.
+        page = re.sub(r'\n\s*<video id="plan-0"[^\n]*', "", page)
+        (d / "index.html").write_text(page, encoding="utf-8")
+        self.story("compose", "essai")
+        cfg = json.loads((d / "story.json").read_text(encoding="utf-8"))
+        self.assertEqual(cfg["media"], [])
+        # Story composée par une version antérieure (pas d'état connu) : l'ancien garde-fou reste.
+        (d / ".composee.json").unlink()
+        (d / "index.html").write_text((d / "index.html").read_text(encoding="utf-8").replace('data-start="1.200"', 'data-start="1.300"'),
+                                      encoding="utf-8")
         r = self.story("compose", "essai", check=False)
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn("retouché dans l'app", r.stderr + r.stdout)
-        self.assertIn('data-start="1.200"', (d / "index.html").read_text(encoding="utf-8"))
+        self.assertIn("état d'origine n'est pas connu", r.stderr + r.stdout)
         self.story("compose", "essai", "--ecraser")
-        self.assertNotIn('data-start="1.200"', (d / "index.html").read_text(encoding="utf-8"))
+        self.assertIn('data-start="1.200"', (d / "index.html").read_text(encoding="utf-8"))
 
         # Un sous-titre trop large : la composition s'écrit (l'app le montre), l'export le refuse.
         cfg = json.loads((d / "story.json").read_text(encoding="utf-8"))
@@ -160,12 +180,69 @@ class StoryCommeUnReel(unittest.TestCase):
         self.assertIn("trop large", r.stderr + r.stdout)
 
         shutil.copy2(d / "cut.mp4", d / "story_essai_FINAL.mp4")
+        (d / "renders").mkdir()
+        shutil.copy2(d / "cut.mp4", d / "renders" / "export-app.mp4")   # l'export du bouton Export de l'app
         self.story("close", "essai", "--no-archive")
         self.assertEqual(sorted(p.name for p in d.iterdir()),
-                         ["assets", "hyperframes.json", "index.html", "meta.json", "story.json"])
+                         ["assets", "hyperframes.json", "index.html", "meta.json", "renders", "story.json"],
+                         "les dossiers de l'app (renders/, caches) ne sont jamais touchés à la clôture")
         self.assertEqual(json.loads((d / "meta.json").read_text(encoding="utf-8"))["monteurIa"]["etat"], "publie")
         self.assertIn("Story publiée", (d / "index.html").read_text(encoding="utf-8"))
 
+
+    def test_musique_zoom_et_banque_de_brolls(self):
+        """Réglages de /setup-stories : visage un peu zoomé au cut (sans perte), musique de fond posée
+        par compose sous la voix (volume, point d'entrée, retouchable dans l'app), banque de B-rolls
+        décrite dans assets/b-roll/catalog.json."""
+        musique = self.maison / "assets" / "music" / "fond.mp3"
+        musique.parent.mkdir(parents=True)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=220:sample_rate=44100",
+                        "-t", "40", "-c:a", "libmp3lame", str(musique)], check=True)
+        (self.maison / "brand.config.json").write_text(json.dumps({
+            "story": {"faceZoom": 1.2, "music": {"src": "assets/music/fond.mp3", "in": 10, "volume": 0.07}, "broll": True},
+        }), encoding="utf-8")
+        d = self.maison / "stories" / "zoom"
+        self.story("init", "zoom", "--rush", str(self.plan))   # rush 1920x1080 : le zoom recadre dedans
+        cfg = json.loads((d / "story.json").read_text(encoding="utf-8"))
+        cfg["islands"] = [[0.1, 1.9, "test"]]
+        (d / "story.json").write_text(json.dumps(cfg), encoding="utf-8")
+        self.assertIn("visage x1.2", self.story("cut", "zoom").stdout)
+        dims = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "csv=p=0",
+                               str(d / "cut.mp4")], capture_output=True, text=True).stdout.split()[0]
+        self.assertEqual(dims, "1080,1920")
+        page = (d / "index.html").read_text(encoding="utf-8")
+        self.assertIn('<audio id="musique" src="assets/musique/fond.mp3" data-start="0"', page)
+        self.assertIn('data-media-start="10" data-volume="0.07"', page)
+        self.assertTrue((d / "assets" / "musique" / "fond.mp3").exists(), "le rendu ne voit que la story")
+        # Volume baissé dans l'app -> reporté dans story.json (la musique devient propre à la story).
+        (d / "index.html").write_text(page.replace('data-volume="0.07"', 'data-volume="0.04"'), encoding="utf-8")
+        self.story("compose", "zoom")
+        cfg = json.loads((d / "story.json").read_text(encoding="utf-8"))
+        self.assertEqual(cfg["music"]["volume"], 0.04)
+        # "music": null dans story.json = cette story sans musique, malgré le réglage.
+        cfg["music"] = None
+        (d / "story.json").write_text(json.dumps(cfg), encoding="utf-8")
+        self.story("compose", "zoom")
+        self.assertNotIn('id="musique"', (d / "index.html").read_text(encoding="utf-8"))
+
+        # Banque de B-rolls : un plan fourni est converti, catalogué, puis utilisable par son chemin.
+        r = self.story("broll", "apercu", str(self.rush))
+        self.assertTrue((self.maison / "assets" / "b-roll" / ".apercus" / "rush.jpg").exists(), r.stdout)
+        r = self.story("broll", "add", str(self.rush), check=False)
+        self.assertNotEqual(r.returncode, 0, "une description est obligatoire")
+        r = self.story("broll", "add", str(self.rush), "--description", "Mire de test", "--categorie", "Écran", "--nom", "mire")
+        clip = self.maison / "assets" / "b-roll" / "mire.mp4"
+        self.assertTrue(clip.exists(), r.stdout)
+        cat = json.loads((self.maison / "assets" / "b-roll" / "catalog.json").read_text(encoding="utf-8"))
+        self.assertEqual((cat[0]["file"], cat[0]["categorie"], cat[0]["description"]), ("mire.mp4", "ecran", "Mire de test"))
+        self.assertIn("Mire de test", self.story("broll", "list").stdout)
+        r = self.story("broll", "add", str(self.rush), "--description", "doublon", "--nom", "mire", check=False)
+        self.assertNotEqual(r.returncode, 0, "jamais d'écrasement dans la banque")
+        cfg = json.loads((d / "story.json").read_text(encoding="utf-8"))
+        cfg["media"] = [{"src": "assets/b-roll/mire.mp4", "start": 0.2, "end": 1.2, "in": 0.5}]
+        (d / "story.json").write_text(json.dumps(cfg), encoding="utf-8")
+        self.story("compose", "zoom")
+        self.assertRegex((d / "index.html").read_text(encoding="utf-8"), r'<video id="plan-0" class="plein clip" src="assets/plans/plan-0-\w+\.mp4"')
 
     def test_script_d_abord_puis_video(self):
         """Dans l'app, un script se brainstorme dans le projet de la story : init --brief sans vidéo,

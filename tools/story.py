@@ -15,11 +15,14 @@ les règles du Système Stories. stories/<slug>/ est un projet de l'app (meta.js
 écrite par `compose` depuis story.json : visage (cut.mp4) et voix, plans insérés, bandeaux et
 sous-titres en éléments séparés, retouchables à la main dans l'app. L'export est natif, comme un
 Reel : bouton Export de l'app, ou `story.py render` (HyperFrames). Une retouche faite dans l'app
-n'est jamais écrasée : `compose` refuse tant qu'on ne lui dit pas --ecraser (reporter d'abord la
-retouche dans story.json). Monteur IA 1 (sans app) : rendu ffmpeg, comme avant.
+(texte, emoji, timing, place, taille, volume) n'est jamais perdue : `compose` la REPORTE dans
+story.json avant de réécrire (il compare index.html à l'état qu'il avait posé, noté dans
+.composee.json). `--ecraser` ne sert qu'à une story d'avant cette version, sans cet état.
+Monteur IA 1 (sans app) : rendu ffmpeg, comme avant.
 
-Les chemins (ffmpeg, whisper) et le style des sous-titres viennent de brand.config.json
-(sections `env` et `story`) : rien n'est codé en dur.
+Les chemins (ffmpeg, whisper), le style des sous-titres, le cadrage du visage (faceZoom), la
+musique de fond et la banque de B-rolls viennent de brand.config.json (sections `env` et
+`story`, écrites par /setup-stories) : rien n'est codé en dur.
 
 Usage :
   python3 tools/story.py init      <slug> --rush /chemin/rush.MP4 [--ouvrir]
@@ -32,6 +35,7 @@ Usage :
   python3 tools/story.py compose   <slug> [--ecraser]      (Monteur IA 2 : la composition de l'app)
   python3 tools/story.py render    <slug>
   python3 tools/story.py close     <slug> [--no-archive]
+  python3 tools/story.py broll     list | apercu <vidéo> | add <vidéo> --description "…" [--nom x] [--categorie y]
 """
 import argparse
 import difflib
@@ -44,6 +48,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from html.parser import HTMLParser
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import story_text as ST  # noqa: E402
@@ -142,8 +147,11 @@ def load(slug):
     if not p.exists():
         sys.exit(f"Aucune story « {slug} ». Lance d'abord : python3 tools/story.py init {slug} --rush …")
     st = story_style()
+    # La musique de brand.config est le défaut de toute story ; "music": null dans story.json = aucune.
+    musique = st.get("music") if isinstance(st.get("music"), dict) else None
     base = {**DEFAULTS, "caption_y": st["captionY"], "caption_size": st["captionSize"],
-            "caption_case": st["captionCase"]}
+            "caption_case": st["captionCase"], "face_zoom": st.get("faceZoom") or 1.0,
+            "face_zoom_y": st.get("faceZoomY", 0.38), "music": musique}
     return {**base, **json.loads(p.read_text(encoding="utf-8"))}
 
 
@@ -159,7 +167,7 @@ COMPOSITION = """<!DOCTYPE html>
     <meta name="viewport" content="width=1080, height=1920">
     <script src="assets/vendor/gsap.min.js"></script>
     <!-- Story « {slug} » ({etat}), écrite par tools/story.py compose depuis story.json. Une retouche
-         faite ici, dans l'app, est gardée : compose refuse de l'écraser sans --ecraser. -->
+         faite ici, dans l'app, est reportée dans story.json avant toute réécriture (compose l'adopte). -->
     <style>
 {polices}      * {{ margin: 0; padding: 0; box-sizing: border-box; }}
       html, body {{ width: 1080px; height: 1920px; overflow: hidden; background: #141414; }}
@@ -185,6 +193,165 @@ COMPOSITION = """<!DOCTYPE html>
 </html>
 """
 IMAGES = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+VIDES = {"img", "br", "source", "meta", "link", "input", "hr"}
+ID_ECRIT = re.compile(r"(st|plan|bandeau)-\d+|musique")
+
+
+# --------------------------------------------------- retouches faites dans l'app
+# Le créateur retouche sa story dans l'app (texte d'un sous-titre, emoji, timing, place, taille,
+# volume). Ces retouches vivent dans index.html ; story.json reste la source de `compose`. Pour
+# qu'une réécriture ne les efface jamais, `compose` relève à chaque écriture l'état qu'il a posé
+# (.composee.json), puis, avant la suivante, compare index.html à cet état et REPORTE dans
+# story.json tout ce qui a changé.
+class _Lecteur(HTMLParser):
+    """Relève les éléments que compose a écrits (sous-titres, plans, bandeaux, musique)."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.el, self._cour, self._prof = {}, None, 0
+
+    def handle_starttag(self, tag, attrs):
+        a = {k: (v or "") for k, v in attrs}
+        if self._cour:
+            if tag not in VIDES:
+                self._prof += 1
+            if tag == "span" and self.el[self._cour]["span"] is None:
+                self.el[self._cour]["span"] = a
+        elif ID_ECRIT.fullmatch(a.get("id", "")):
+            self.el[a["id"]] = {"tag": tag, "attrs": a, "texte": "", "span": None}
+            if tag not in VIDES:
+                self._cour, self._prof = a["id"], 0
+
+    def handle_endtag(self, tag):
+        if self._cour and tag not in VIDES:
+            if self._prof == 0:
+                self._cour = None
+            else:
+                self._prof -= 1
+
+    def handle_data(self, data):
+        if self._cour:
+            self.el[self._cour]["texte"] += data
+
+
+def _style(s):
+    return {k.strip(): v.strip() for k, v in (p.split(":", 1) for p in (s or "").split(";") if ":" in p)}
+
+
+def _px(v, defaut=0.0):
+    m = re.match(r"\s*(-?[\d.]+)", v or "")
+    return float(m.group(1)) if m else defaut
+
+
+def _valeurs(texte):
+    """Ce que montre index.html, élément par élément, dans les unités de story.json."""
+    lec = _Lecteur()
+    lec.feed(texte)
+    out = {}
+    for i, e in lec.el.items():
+        a = e["attrs"]
+        start = round(_px(a.get("data-start")), 3)
+        v = {"start": start, "end": round(start + _px(a.get("data-duration")), 3)}
+        if i.startswith("st-"):
+            st, sp = _style(a.get("style")), _style((e["span"] or {}).get("style"))
+            tx, ty = ((st.get("translate") or "0px 0px").split() + ["0px"])[:2]
+            v["t"] = " ".join(e["texte"].split())
+            v["size"] = round(_px(sp.get("font-size") or st.get("font-size"), 56), 1)
+            v["x"] = round(W / 2 + _px(tx), 1)
+            v["y"] = round(_px(st.get("top")) + _px(st.get("height")) / 2 + _px(ty), 1)
+        elif i == "musique" or i.startswith("plan-"):
+            v["media_start"] = round(_px(a.get("data-media-start")), 3)
+            if i == "musique":
+                v["volume"] = round(_px(a.get("data-volume"), 1.0), 3)
+        out[i] = v
+    return out
+
+
+def _base_path(slug):
+    return sdir(slug) / ".composee.json"
+
+
+def adopter(slug, cfg, page):
+    """Reporte dans cfg (story.json) les retouches faites dans l'app depuis la dernière écriture.
+    Rend la liste des retouches reportées (et sauve story.json s'il y en a)."""
+    try:
+        base = json.loads(_base_path(slug).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not page.exists():
+        return []
+    lu = _valeurs(page.read_text(encoding="utf-8"))
+    notes, suppr = [], []
+    for ident, b in base.get("ids", {}).items():
+        liste, i = b["liste"], b["i"]
+        if liste == "music":
+            entree = cfg.get("music")
+        else:
+            lst = cfg.get(liste, [])
+            # story.json a pu bouger depuis : on retrouve l'entrée telle qu'elle était écrite
+            if not (i < len(lst) and lst[i] == b["entree"]):
+                i = next((k for k, x in enumerate(lst) if x == b["entree"]), None)
+            entree = lst[i] if i is not None else None
+        if not isinstance(entree, dict):
+            continue
+        if ident not in lu:
+            if liste != "music":
+                suppr.append((liste, i))
+            else:
+                cfg["music"] = None
+            notes.append(f"{ident} supprimé dans l'app")
+            continue
+        for k, val in lu[ident].items():
+            avant = b["v"].get(k)
+            if avant is None or val == avant or (isinstance(val, float) and abs(val - avant) < 1e-3):
+                continue
+            if k == "media_start":
+                entree["in"] = round(entree.get("in", 0) + val - avant, 3)
+            else:
+                entree[k] = val
+            notes.append(f"{ident} : {k} {avant} -> {val}")
+    for liste, i in sorted(suppr, key=lambda x: -x[1]):
+        del cfg[liste][i]
+    inconnus = [i for i in lu if i not in base.get("ids", {})]
+    if inconnus:
+        notes.append("⚠️  élément(s) ajouté(s) dans l'app, non reportables dans story.json : " + ", ".join(inconnus))
+    if notes:
+        save(slug, cfg)
+    return notes
+
+
+def _noter_base(slug, contenu, cfg, medias, bandeaux):
+    """État posé par cette écriture, pour reconnaître ensuite les retouches de l'app."""
+    lu, ids = _valeurs(contenu), {}
+    sources = ([("captions", i, c) for i, c in enumerate(cfg.get("captions", []))],
+               [("media", cfg.get("media", []).index(m), m) for m in medias],
+               [("overlays", cfg.get("overlays", []).index(o), o) for o in bandeaux])
+    for prefixe, lot in zip(("st", "plan", "bandeau"), sources):
+        for n, (liste, i, entree) in enumerate(lot):
+            ident = f"{prefixe}-{n}"
+            if ident in lu:
+                ids[ident] = {"liste": liste, "i": i, "entree": json.loads(json.dumps(entree)), "v": lu[ident]}
+    if "musique" in lu:
+        ids["musique"] = {"liste": "music", "i": None, "entree": cfg.get("music"), "v": lu["musique"]}
+    _base_path(slug).write_text(json.dumps({"ids": ids}, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def _chemin(src):
+    """Un chemin de story.json ou de brand.config : absolu, ou relatif au dossier Monteur IA."""
+    p = pathlib.Path(str(src)).expanduser()
+    return p if p.is_absolute() else ROOT / p
+
+
+def _musique(slug, mu):
+    """Copie la musique de fond dans la story (le rendu ne voit que son dossier)."""
+    src = _chemin(mu["src"])
+    if not src.exists():
+        sys.exit(f"Musique introuvable : {src} (brand.config.json -> story.music, ou story.json -> music)")
+    out = sdir(slug) / "assets" / "musique" / src.name
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if not out.exists() or out.stat().st_size != src.stat().st_size:
+        shutil.copy2(src, out)
+    return out.relative_to(sdir(slug)).as_posix()
 
 
 def _lieu(dossier):
@@ -362,14 +529,20 @@ def composer(slug, publiee=False, ecraser=False, auto=True):
     page = d / "index.html"
     meta = _meta(slug)
     connue = (meta.get("monteurIa") or {}).get("composition")
-    if page.exists() and connue and not ecraser and not publiee and _empreinte(page.read_text(encoding="utf-8")) != connue:
-        msg = ("index.html a été retouché dans l'app : retouche gardée, composition NON réécrite. Reporte la "
-               "retouche dans story.json (timings, textes), puis `story.py compose " + slug + " --ecraser`.")
-        if auto:
-            print("⚠️  " + msg)
-            return False
-        sys.exit(msg)
     cfg = load(slug)
+    retouchee = page.exists() and connue and not publiee and _empreinte(page.read_text(encoding="utf-8")) != connue
+    if retouchee and not ecraser:
+        if not _base_path(slug).exists():
+            # Story composée par une version antérieure : l'état d'origine n'est pas connu.
+            msg = ("index.html a été retouché dans l'app et son état d'origine n'est pas connu : composition NON "
+                   f"réécrite. Reporte la retouche dans story.json, puis `story.py compose {slug} --ecraser`.")
+            if auto:
+                print("⚠️  " + msg)
+                return False
+            sys.exit(msg)
+        notes = adopter(slug, cfg, page)
+        print("Retouches de l'app reportées dans story.json :" + "".join(f"\n  · {n}" for n in notes) if notes
+              else "Retouche de l'app sans équivalent dans story.json (rien à reporter).")
     cut = d / "cut.mp4"
     st = story_style()
     corps, etat = [], "vignette d'attente"
@@ -406,18 +579,30 @@ def composer(slug, publiee=False, ecraser=False, auto=True):
             else:   # hauteur illisible : cadre de la largeur voulue, carré, image centrée dedans
                 corps.append(f'      <div id="bandeau-{i}" class="repere clip" {temps} style="left: {(W - w) // 2}px; '
                              f'top: {y - w // 2}px; width: {w}px; height: {w}px"><img src="{src}" alt="" style="width: {w}px"></div>')
-        for i, c in enumerate(cfg.get("captions", [])):
+        # Un sous-titre déplacé dans l'app peut en chevaucher un autre : chacun garde alors sa piste.
+        # "x" = centre horizontal (défaut : le centre du cadre), "y" = centre vertical.
+        legendes = cfg.get("captions", [])
+        pistes, suite = _pistes(legendes, suite)
+        for i, (c, piste) in enumerate(zip(legendes, pistes)):
             txt = c["t"].upper() if cfg.get("caption_case", st.get("captionCase")) == "upper" else c["t"]
             size, y = c.get("size", cfg["caption_size"]), c.get("y", cfg["caption_y"])
+            decale = f"; translate: {c['x'] - W / 2:.1f}px 0px" if "x" in c else ""
             corps.append(f'      <div id="st-{i}" class="repere sous-titre clip" data-start="{c["start"]:.3f}" '
-                         f'data-duration="{c["end"] - c["start"]:.3f}" data-track-index="{suite}" '
-                         f'style="top: {y - size}px; height: {2 * size}px; font-size: {size}px">'
+                         f'data-duration="{c["end"] - c["start"]:.3f}" data-track-index="{piste}" '
+                         f'style="top: {y - size}px; height: {2 * size}px; font-size: {size}px{decale}">'
                          f'<span>{HTML.escape(txt, quote=False)}</span></div>')
-        etat = f"{len(medias)} plan(s), {len(bandeaux)} bandeau(x), {len(cfg.get('captions', []))} sous-titres"
+        mu = cfg.get("music")
+        if mu:
+            corps.append(f'      <audio id="musique" src="{_musique(slug, mu)}" data-start="0" data-duration="{dur}" '
+                         f'data-media-start="{mu.get("in", 0)}" data-volume="{mu.get("volume", 0.07)}" data-track-index="{suite}"></audio>')
+        etat = (f"{len(medias)} plan(s), {len(bandeaux)} bandeau(x), {len(cfg.get('captions', []))} sous-titres"
+                + (", musique" if mu else ""))
     taille = cfg.get("caption_size", st["captionSize"])
     contenu = COMPOSITION.format(slug=slug, cid=f"story-{slug}", dur=dur, etat=etat, corps="\n".join(corps),
                                  polices=_polices(slug, st), couleur=st["captionColor"], skin=_skin_css(st, taille))
     page.write_text(contenu, encoding="utf-8")
+    if not (publiee or not cut.exists()):
+        _noter_base(slug, contenu, cfg, medias, bandeaux)
     meta = _meta(slug)
     meta.setdefault("monteurIa", {"lieu": "story"})["composition"] = _empreinte(contenu)
     _ecrire_meta(slug, meta)
@@ -433,8 +618,12 @@ def trop_larges(cfg, st=None):
     out = []
     for c in cfg.get("captions", []):
         txt = c["t"].upper() if cfg.get("caption_case", st.get("captionCase")) == "upper" else c["t"]
-        if ST.measure(txt, c.get("size", cfg["caption_size"]), st)[0] > ST.MAX_TEXT_W:
+        larg = ST.measure(txt, c.get("size", cfg["caption_size"]), st)[0]
+        x = c.get("x", W / 2)
+        if larg > ST.MAX_TEXT_W:
             out.append(txt)
+        elif x - larg / 2 < ST.SAFE_X or x + larg / 2 > W - ST.SAFE_X:
+            out.append(f"{txt} (x={x} : sort de la marge de {ST.SAFE_X} px)")
     return out
 
 
@@ -577,17 +766,23 @@ def cmd_cut(a):
     if not cfg["islands"]:
         sys.exit("`islands` est vide : remplis-le depuis la sortie de `story.py silences`.")
     out = sdir(a.slug) / "cut.mp4"
+    # Cadrage du visage (story.faceZoom) appliqué ici, sur le rush, plus grand que 1080x1920 :
+    # le cut reste net. À 1.0 : le cadre tel quel, centré.
+    zoom = max(float(cfg.get("face_zoom") or 1.0), 1.0)
+    zw, zh = round(W * zoom / 2) * 2, round(H * zoom / 2) * 2
+    ancre = min(max(float(cfg.get("face_zoom_y", 0.38)), 0.0), 1.0) if zoom > 1 else 0.5   # 1.0 : centré, comme avant
     parts, cin, kept = [], "", 0.0
     for i, isl in enumerate(cfg["islands"]):
         s = max(isl[0] - cfg["pad_start"], 0.0)
         e = isl[1] + cfg["pad_end"]
         kept += e - s
         parts.append(f"[0:v:0]trim=start={s:.3f}:end={e:.3f},setpts=PTS-STARTPTS,"
-                     f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}[v{i}];")
+                     f"scale={zw}:{zh}:force_original_aspect_ratio=increase,"
+                     f"crop={W}:{H}:(iw-{W})/2:(ih-{H})*{ancre}[v{i}];")
         parts.append(f"[0:a:0]atrim=start={s:.3f}:end={e:.3f},asetpts=PTS-STARTPTS[a{i}];")
         cin += f"[v{i}][a{i}]"
     fg = "".join(parts) + f"{cin}concat=n={len(cfg['islands'])}:v=1:a=1[v][a]"
-    print(f"Prises : {len(cfg['islands'])} | durée estimée : {kept:.2f} s")
+    print(f"Prises : {len(cfg['islands'])} | durée estimée : {kept:.2f} s" + (f" | visage x{zoom:g}" if zoom > 1 else ""))
     r = run([FFMPEG, "-y", "-i", rush_de(cfg), "-filter_complex", fg,
              "-map", "[v]", "-map", "[a]", "-r", FPS,
              "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", "-pix_fmt", "yuv420p",
@@ -863,8 +1058,10 @@ def cmd_render(a):
         img.save(p)
         inputs += ["-i", str(p)]
         y = c.get("y", cfg["caption_y"])
+        # ancre = centre du glyphe (le PNG porte les marges du skin) ; "x" = centre horizontal voulu
+        px = f"{c['x']:.1f}-{ax:.1f}" if "x" in c else f"(W-w)/2+{(img.width / 2 - ax):.1f}"
         fg.append(f"[{n}:v]format=rgba[c{n}];")
-        fg.append(f"{last}[c{n}]overlay=(W-w)/2:{y}-h/2:"
+        fg.append(f"{last}[c{n}]overlay={px}:{y}-{ay:.1f}:"
                   f"enable='between(t,{c['start']:.3f},{c['end']:.3f})'[s{n}];")
         last, n = f"[s{n}]", n + 1
 
@@ -874,15 +1071,26 @@ def cmd_render(a):
     chain = "".join(fg)
     if chain.endswith(";"):
         chain = chain[:-1]
+    # 4. musique de fond (brand.config story.music, ou music de story.json), sous la voix
+    son = "0:a"
+    mu = cfg.get("music")
+    if mu:
+        src = _chemin(mu["src"])
+        if not src.exists():
+            sys.exit(f"Musique introuvable : {src}")
+        inputs += ["-ss", str(mu.get("in", 0)), "-i", str(src)]
+        chain = (chain + ";" if chain else "") + (f"[{n}:a]volume={mu.get('volume', 0.07)}[mu];"
+                                                  f"[0:a][mu]amix=inputs=2:duration=first:normalize=0[son]")
+        son = "[son]"
     cmd = [FFMPEG, "-y"] + inputs
     if chain:
-        cmd += ["-filter_complex", chain, "-map", last, "-map", "0:a"]
+        cmd += ["-filter_complex", chain, "-map", last if fg else "0:v", "-map", son]
     else:
         cmd += ["-map", "0:v", "-map", "0:a"]
     cmd += ["-r", FPS, "-c:v", "libx264", "-preset", "slow", "-crf", "16",
             "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", str(out)]
     print(f"{len(cfg.get('media',[]))} plan(s) · {len(cfg.get('overlays',[]))} bandeau(x) · "
-          f"{len(cfg.get('captions',[]))} sous-titres · skin {st['captionsSkin']}")
+          f"{len(cfg.get('captions',[]))} sous-titres · skin {st['captionsSkin']}" + (" · musique" if mu else ""))
     r = run(cmd)
     if r.returncode:
         sys.exit(r.stderr[-2500:])
@@ -920,8 +1128,10 @@ def cmd_close(a):
         print(f"stories/{a.slug}/ supprimé ({size/1e6:.0f} Mo libérés)")
         return
     # Monteur IA 2 : le projet de l'app reste (story.json + vignette « publiée »), seuls les médias partent.
+    # Les dossiers de l'app (exports, caches, réglages) ne se touchent jamais : renders/ garde l'export du créateur.
     rush = pathlib.Path(load(a.slug).get("rush") or "")
-    garder = {"story.json", "meta.json", "hyperframes.json", "CLAUDE.md", "AGENTS.md", ".hyperframes", ".thumbnails"}
+    garder = {"story.json", "meta.json", "hyperframes.json", "CLAUDE.md", "AGENTS.md", ".hyperframes", ".thumbnails",
+              "renders", ".transcode-cache", ".waveform-cache", ".claude"}
     size = 0
     for p in d.iterdir():
         if p.name in garder:
@@ -938,9 +1148,124 @@ def cmd_close(a):
           "(l'archiver dans l'app pour le retirer de la liste)")
 
 
+# ---------------------------------------------------------------------- b-roll
+# La banque de B-rolls du créateur : assets/b-roll/ du dossier Monteur IA, décrite dans catalog.json.
+# L'IA y CHOISIT un plan sur sa description (jamais en ouvrant les vidéos), puis le déclare dans
+# `media` ("src": "assets/b-roll/<fichier>"). Un plan fourni pour une story y est versé d'abord,
+# pour être retrouvé la fois suivante. Réglage : brand.config.json -> story.broll (true | false | null).
+BROLL = ROOT / "assets" / "b-roll"
+CATALOGUE = BROLL / "catalog.json"
+
+
+def _catalogue():
+    try:
+        data = json.loads(CATALOGUE.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def _slug(texte):
+    import unicodedata
+    t = unicodedata.normalize("NFKD", texte).encode("ascii", "ignore").decode("ascii").lower()
+    return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", t)).strip("-")
+
+
+def _date_de(src):
+    """Date de tournage (métadonnées), sinon aujourd'hui."""
+    import datetime
+    for tag in ("format_tags=com.apple.quicktime.creationdate", "format_tags=creation_time"):
+        v = probe(src, tag)
+        if re.match(r"\d{4}-\d{2}-\d{2}", v or ""):
+            return v[:10]
+    return datetime.date.today().isoformat()
+
+
+def _hdr(src):
+    info = probe(src, "stream=color_transfer")
+    return "arib-std-b67" in info or "smpte2084" in info
+
+
+def cmd_broll(a):
+    if a.action == "list":
+        clips = _catalogue()
+        if not clips:
+            print(f"Banque vide : {BROLL}/ (story.py broll add <vidéo> --description \"…\")")
+            return
+        for c in clips:
+            if a.categorie and c.get("categorie") != a.categorie:
+                continue
+            qui = " · créateur visible" if c.get("visible") else ""
+            print(f"- {c['file']} · {c.get('duree', 0):.1f} s · [{c.get('categorie', '?')}]{qui} · {c.get('description', '')}")
+        print(f"\n{len(clips)} plan(s) dans {BROLL}/ ; dans story.json : \"src\": \"assets/b-roll/<fichier>\"")
+        return
+    if not a.source:
+        sys.exit("Donne la vidéo : story.py broll apercu <vidéo> | add <vidéo> --description \"…\"")
+    src = pathlib.Path(a.source).expanduser().resolve()
+    if not src.exists():
+        sys.exit(f"Vidéo introuvable : {src}")
+    duree = float(probe(src) or 0)
+    if a.action == "apercu":
+        # Planche de 3 images (début, milieu, fin) : l'IA la regarde pour écrire la description.
+        BROLL.mkdir(parents=True, exist_ok=True)
+        out = BROLL / ".apercus" / f"{_slug(src.stem)}.jpg"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        n = max(int(duree * 30), 3)
+        pas = max(n // 3, 1)
+        r = run([FFMPEG, "-v", "error", "-y", "-i", str(src), "-vf",
+                 f"select='not(mod(n\\,{pas}))',scale=360:-2,tile=3x1", "-frames:v", "1", str(out)])
+        if r.returncode or not out.exists():
+            sys.exit(f"Aperçu impossible :\n{r.stderr[-800:]}")
+        dims = probe(src, "stream=width,height").split()
+        print(f"{src.name} : {duree:.1f} s, {'x'.join(dims[:2])}{' (HDR)' if _hdr(src) else ''}, tournée le {_date_de(src)}")
+        print(f"-> {out}  (regarde cette planche, puis : story.py broll add \"{src}\" --description \"…\")")
+        return
+    # add
+    if not (a.description or "").strip():
+        sys.exit("Il faut --description \"<ce qu'on voit, en une phrase>\" (c'est sur elle que le plan sera choisi).")
+    nom = _slug(a.nom) if a.nom else f"{_date_de(src)}-{_slug(src.stem)}"
+    BROLL.mkdir(parents=True, exist_ok=True)
+    out = BROLL / f"{nom}.mp4"
+    if out.exists():
+        sys.exit(f"{out.name} existe déjà dans la banque : donne un autre --nom.")
+    pivot = "transpose=1," if a.pivoter else ""
+    cadre = f"{pivot}scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1"
+    sdr = ("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable,"
+           "zscale=t=bt709:m=bt709:r=tv,format=yuv420p,")
+    base = [FFMPEG, "-v", "error", "-y", "-i", str(src), "-r", FPS, "-c:v", "libx264", "-preset", "medium",
+            "-crf", "18", "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_primaries", "bt709",
+            "-color_trc", "bt709", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"]
+    r = None
+    if _hdr(src):
+        r = run(base[:6] + ["-vf", sdr + cadre] + base[6:] + [str(out)])
+        if r.returncode:
+            print("⚠️  Conversion HDR -> SDR impossible avec ce ffmpeg (zscale absent) : plan gardé tel quel, "
+                  "couleurs peut-être délavées.")
+    if r is None or r.returncode:
+        r = run(base[:6] + ["-vf", cadre] + base[6:] + [str(out)])
+    if r.returncode or not out.exists():
+        sys.exit(f"Conversion impossible :\n{r.stderr[-1200:]}")
+    entree = {"file": out.name, "description": a.description.strip(), "categorie": _slug(a.categorie or "divers"),
+              "duree": round(float(probe(out) or duree), 1), "visible": bool(a.visible), "date": _date_de(src),
+              "source": src.name}
+    clips = _catalogue() + [entree]
+    CATALOGUE.write_text(json.dumps(clips, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    print(f"-> {out}  ({entree['duree']} s, {len(clips)} plan(s) dans la banque)")
+    print(f"   story.json : {{\"src\": \"assets/b-roll/{out.name}\", \"start\": …, \"end\": …, \"in\": 0}}")
+
+
 # ----------------------------------------------------------------------- cli
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 sub = ap.add_subparsers(dest="cmd", required=True)
+sb = sub.add_parser("broll", help="la banque de B-rolls du créateur (assets/b-roll/)")
+sb.add_argument("action", choices=["list", "apercu", "add"])
+sb.add_argument("source", nargs="?", help="la vidéo (apercu, add)")
+sb.add_argument("--description", help="ce qu'on voit, en une phrase (add)")
+sb.add_argument("--nom", help="nom du fichier dans la banque (défaut : date + nom d'origine)")
+sb.add_argument("--categorie", help="ex. lieu, ecran, geste, ambiance, createur")
+sb.add_argument("--visible", action="store_true", help="le créateur est à l'image")
+sb.add_argument("--pivoter", action="store_true", help="source filmée debout mais enregistrée couchée (sans rotation)")
+sb.set_defaults(fn=cmd_broll)
 for name, fn in [("init", cmd_init), ("silences", cmd_silences), ("cut", cmd_cut),
                  ("words", cmd_words), ("captions", cmd_captions),
                  ("preview", cmd_preview), ("compose", cmd_compose), ("render", cmd_render), ("close", cmd_close)]:

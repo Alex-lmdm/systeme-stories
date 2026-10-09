@@ -4,8 +4,9 @@ description: >-
   Montage d'une STORY Instagram : visage plein écran, naturel, sous-titres sobres une ligne,
   parfois un plan filmé en plein écran (B-roll) et un petit bandeau motion. Use when the user says
   « une story », « monte ma story », « c'est pour les stories » with a face-cam rush.
-  PAS un Reel (→ derush + motion-design) : zéro split-screen, zéro composition HTML, pipeline
-  100 % ffmpeg via tools/story.py. Entrée : un rush brut. Sortie : un MP4 1080x1920 prêt à poster.
+  PAS un Reel (→ derush + motion-design) : zéro split-screen, zéro motion de Reel, tout passe par
+  tools/story.py (B-rolls de la banque du créateur, musique de fond réglée une fois).
+  Entrée : un rush brut. Sortie : un MP4 1080x1920 prêt à poster.
 ---
 
 # Story Instagram — le montage
@@ -23,14 +24,26 @@ description: >-
 > projet par story (`init --ouvrir`, conversation neuve), et un `index.html` qui est sa vraie
 > composition (visage, voix, plans insérés, bandeaux, sous-titres en éléments séparés), écrite par
 > `story.py compose` depuis `story.json` (aussi après `cut` et `captions`). Le créateur peut la
-> retoucher à la main dans l'app : `compose` ne l'écrase jamais sans `--ecraser` (reporter d'abord la
-> retouche dans `story.json`). Export natif : bouton Export de l'app, ou `story.py render`. Depuis
-> la story, les commandes s'écrivent `python3 ../../tools/story.py …`.
+> retoucher à la main dans l'app (texte, emoji, timing, place, taille, volume) : **`compose` reporte
+> seul ces retouches dans `story.json` avant de réécrire**, rien n'est jamais perdu. **Ne lance jamais
+> `compose --ecraser`** : il jette les retouches du créateur (seul cas : une story composée par une
+> version antérieure, sans `.composee.json`, après les avoir reportées à la main). Export natif :
+> bouton Export de l'app, ou `story.py render`. Depuis la story, les commandes s'écrivent
+> `python3 ../../tools/story.py …`.
 
-> Le style des sous-titres (police, skin, position) vient de `brand.config.json` → section
-> `story`, écrite par **`/setup-stories`**. Si cette section n'existe pas encore, propose de
-> lancer `/setup-stories` (2 minutes) avant le premier montage — sinon la story sort dans le
-> style de départ, identique pour tout le monde.
+> Le style des sous-titres (police, skin, position), le cadrage du visage, la musique de fond et
+> la banque de B-rolls viennent de `brand.config.json` → section `story`, écrite par
+> **`/setup-stories`**. Si cette section n'existe pas encore, propose de lancer `/setup-stories`
+> (2 minutes) avant le premier montage, sinon la story sort dans le style de départ, identique
+> pour tout le monde.
+
+> **Musique et B-rolls : une suggestion, jamais une insistance (§4.1).** `story.music` et
+> `story.broll` ont trois états : **absent ou `null`** = jamais proposé → tu le proposes **une
+> fois par story, en une phrase, à la fin des sous-titres**, puis tu continues ; **`false`** =
+> le créateur a refusé → **plus jamais un mot** ; **réglé** (`music` = un fichier, `broll` =
+> `true`) → tu t'en sers sans demander. Un refus se note tout de suite dans `brand.config.json`
+> (`"music": false` ou `"broll": false`, sans toucher au reste), un oui se règle par
+> `/setup-stories` (ou directement, si le créateur donne le fichier dans la conversation).
 
 ---
 
@@ -40,12 +53,13 @@ description: >-
 |---|---|---|
 | Cadre | 1080×1920, 30 fps | idem |
 | Plan par défaut | **visage PLEIN ÉCRAN**, naturel | split-screen |
+| Cadrage visage | tel quel, ou **un peu resserré** si le créateur l'a choisi (`faceZoom`, ex. 1,2), appliqué par `cut` sur le rush, donc sans perte de netteté | visage zoomé selon la section |
 | Split-screen | **JAMAIS** | par défaut |
 | Motion | quasi aucun ; au mieux un **bandeau** haut ou bas par-dessus le visage (un logo, un chiffre, 3 mots) | motion-first, section par section |
 | Sous-titres | sobres, **une seule ligne**, skin choisi au `/setup-stories` | style Reel du créateur |
 | Position sous-titre | **juste sous le visage** (`captionY`, défaut 1180) | selon la section |
-| B-roll | des plans **que le créateur fournit**, en **plein écran**, sa voix continue dessous | intégré aux sections |
-| SFX / musique | pas par défaut ; seulement s'il le demande | sound design complet |
+| B-roll | des plans **du créateur** (fournis, ou pris dans **sa banque** `assets/b-roll/`), en **plein écran**, sa voix continue dessous ; **une étape du montage** (§4.1), pas une option | intégré aux sections |
+| SFX / musique | **musique de fond** si le créateur en a réglé une (`story.music`, posée par `compose` et par le rendu ffmpeg, ≈ 10 dB sous la voix) ; sinon proposée une fois (§4.1). SFX seulement s'il le demande | sound design complet |
 | Publication | pas de légende, pas de DM ; la story se poste telle quelle | étape publication complète |
 
 **Ce qui reste identique au Reel** : le dérush (meilleure prise, blancs coupés, souffle inter-cut
@@ -84,15 +98,19 @@ dossier est supprimé. `--no-archive` pour ne rien garder du tout.
 
 ## 3. Le pipeline (7 commandes)
 
+Ordre d'une story : **dérush → sous-titres → B-roll (§4.1) → review du créateur → export**.
+
 ```bash
 python3 tools/story.py init     <slug> --rush ~/Downloads/rush.MP4 --ouvrir   # projet de l'app
 python3 tools/story.py init     <slug> --brief "<demande>" --ouvrir  # app : script d'abord, puis --rush au tournage
 python3 tools/story.py silences <slug>          # îlots NUMÉROTÉS + transcription par îlot
-python3 tools/story.py cut      <slug>          # après avoir rempli `islands`
+python3 tools/story.py cut      <slug>          # après avoir rempli `islands` (cadrage faceZoom appliqué ici)
 python3 tools/story.py words    <slug>          # transcription mot-à-mot, prise par prise
 python3 tools/story.py captions <slug>          # 1er jet de découpe → story.json
+#                                                 puis les B-rolls dans `media` (§4.1) + compose
 python3 tools/story.py preview  <slug> --t 3.0  # contrôle visuel d'une frame
 python3 tools/story.py render   <slug>          # MP4 final (copié dans ~/Downloads)
+python3 tools/story.py broll    list            # la banque de B-rolls du créateur (§4.1)
 ```
 
 ### 3.1 Dérush — choisir les prises
@@ -141,14 +159,20 @@ suffit souvent.
   "caption_case": "as-is",    // "as-is" | "upper"
   "islands":  [[11.05, 14.11, "texte de la prise"]],
   "chunks":   [["premier sous-titre", "de la prise 0"], ["prise 1"]],   // découpage DICTÉ (§5)
-  "captions": [{"t": "tu peux", "start": 0.0, "end": 0.6}],             // + "y"/"size" en override
-  "media":    [{"src": "/chemin/plan.mp4", "start": 5.0, "end": 8.0, "in": 0.0, "fit": "cover"}],
-  "overlays": [{"src": "stories/ma-story/bandeau.mov", "start": 5.0, "end": 8.0, "y": 300, "w": 420}]
+  "captions": [{"t": "tu peux", "start": 0.0, "end": 0.6}],             // + "y"/"size"/"x" en override
+  "media":    [{"src": "assets/b-roll/2026-10-09-coworking.mp4", "start": 5.0, "end": 8.0, "in": 0.0, "fit": "cover"}],
+  "overlays": [{"src": "stories/ma-story/bandeau.mov", "start": 5.0, "end": 8.0, "y": 300, "w": 420}],
+  "music":    null                 // absent = la musique réglée au /setup-stories ; null = cette story sans musique
 }
 ```
 
-- **`media`** = un plan que le créateur a filmé (B-roll), en **plein écran**, qui recouvre son
-  visage sur `[start, end]`. Il est **muet** : la voix du cut continue dessous.
+- **`face_zoom`** (défaut : `story.faceZoom` de brand.config, 1 = tel quel) et **`music`**
+  (défaut : `story.music`) se règlent une fois au `/setup-stories` ; une story peut y déroger
+  (`"music": null`, ou `{"src": "assets/music/autre.mp3", "in": 12, "volume": 0.07}`). Le
+  volume est bas, audible sous la voix ; si le créateur le baisse dans l'app, `compose` le reporte.
+- **`media`** = un plan **du créateur** (B-roll), en **plein écran**, qui recouvre son visage sur
+  `[start, end]`. Il est **muet** : la voix du cut continue dessous. `src` = un chemin absolu, ou
+  relatif au dossier Monteur IA (la banque : `assets/b-roll/<fichier>`).
   - `fit: "cover"` (défaut) : recadré plein cadre (`scale`+`crop` centré).
   - `fit: "blur"` : pour un plan horizontal ou une photo qui ne remplit pas le cadre — posé net
     sur son propre fond flouté, sans déformation.
@@ -158,13 +182,69 @@ suffit souvent.
   vertical. Un **SVG est refusé** → l'exporter en PNG avant.
 - Les **sous-titres passent toujours au-dessus** de tout, y compris d'un plan plein écran.
 
-### Placer un B-roll — les règles
+### 4.1 B-roll et musique : l'étape qui suit les sous-titres
 
-- Un plan couvre une **idée entière** (une phrase ou un groupe de phrases), jamais un bout de
-  mot : caler `start`/`end` sur les bornes des sous-titres concernés (`captions` déjà timés).
-- 2 à 4 secondes par plan : en dessous ça clignote, au-dessus on oublie le visage.
-- L'utilisateur dit « mets cette vidéo quand je parle de X » : retrouve le passage dans
+Une fois les sous-titres posés, **tu enchaînes sur les B-rolls sans attendre que le créateur y
+pense** : c'est une étape du montage. Selon l'état de `story.broll` (brand.config) :
+
+- **`true`** (banque réglée) : tu montes les plans, puis tu montres le découpage (§ ci-dessous).
+- **absent / `null`** : tu proposes, **une phrase, une fois** : « Si tu veux, je peux insérer des
+  plans de toi en plein écran pendant que tu parles (toi qui travailles, qui marches, ton écran,
+  ton lieu…). Donne-moi des vidéos courtes, je les garde dans une banque et je pioche dedans à
+  chaque story. Optionnel, dis-moi. » Un oui → tu verses ses plans (ci-dessous) et tu règles
+  `"broll": true` ; un non → `"broll": false` dans `brand.config.json` et **tu n'en reparles
+  jamais** ; pas de réponse → tu continues sans, et tu reproposeras à la prochaine story.
+- **`false`** : rien, pas un mot, sauf si le créateur fournit lui-même un plan (alors tu le
+  places, sans rouvrir la question de la banque).
+
+**La musique suit la même règle** (`story.music`) : absent → une phrase, une fois, au même
+moment : « Tu veux une musique de fond sur tes stories, très bas sous ta voix ? Si tu as déjà
+une musique dans ton Monteur IA (`audio.musicFile`), je peux la reprendre, ou tu m'en donnes une
+réservée aux stories ; elle sera reprise à chaque fois. » Oui → `/setup-stories` (bloc musique)
+ou directement `"music": {"src": "assets/music/<fichier>", "in": 0, "volume": 0.07}` ; non →
+`"music": false`. Le monteur ne va **pas** chercher de musique tout seul : c'est le créateur
+qui la fournit.
+
+**La banque de B-rolls** (`assets/b-roll/` du dossier Monteur IA, décrite dans `catalog.json`) :
+
+1. **Verser d'abord les plans fournis** (souvent déposés dans la story ou glissés dans l'app),
+   pour les retrouver la fois suivante :
+   `story.py broll apercu <vidéo>` (planche de 3 images : regarde-la pour décrire le plan), puis
+   `story.py broll add <vidéo> --description "<ce qu'on voit, en une phrase>" --categorie <lieu|ecran|geste|ambiance|createur> [--visible]`.
+   L'outil convertit en 1080×1920 SDR 30 i/s, garde le son, refuse d'écraser un nom existant.
+   Une source filmée debout mais enregistrée couchée (4K sans rotation) : `--pivoter`, à vérifier
+   sur l'aperçu avant.
+2. **Choisir sur le catalogue**, jamais en ouvrant les vidéos : `story.py broll list`
+   (description, catégorie, durée, créateur visible). Un même plan peut servir deux fois avec
+   deux `in` différents.
+3. Déclarer dans `media` (`"src": "assets/b-roll/<fichier>"`, `in` = point d'entrée dans le
+   clip). Caler le moment fort du plan sur le mot (`in` = moment du geste − (mot − start)).
+
+**Le dosage** (ce qui fait une story qui tient) :
+
+- Repérer les **phrases qui se montrent** : un lieu (« je suis dans un coworking »), un geste
+  (« j'écris », « je lui parle »), un objet, l'écran, la formule de fin.
+- **Environ la moitié du temps en B-roll**, en alternance avec le visage : sur ~40 s, 8 à 9 plans
+  de 1,3 à 4 s. En dessous de 1,3 s ça clignote, au-dessus de 4 s on oublie le visage.
+- **Le hook** gagne à s'ouvrir sur un plan du **créateur en situation** (en mouvement, dans la
+  rue, à son bureau), pris dès sa première image (`in` 0) sur toute la première phrase ; le
+  visage face caméra arrive à la 2ᵉ phrase.
+- **Le visage** tient les réactions et les phrases d'opinion (« et franchement c'est fatigant »,
+  « je vous jure… », le résumé final). Le B-roll montre les lieux, les gestes, le contraste.
+- **Le plan de fin** = un plan d'ambiance doux (extérieur, nature, lumière) sur la formule de sortie.
+  Le dernier plan finit à la **durée exacte du cut**, sinon le visage revient une image à la fin.
+- Un plan couvre une **idée entière**, jamais un bout de mot : caler `start`/`end` sur les
+  bornes des sous-titres (`captions` déjà timés). Un plan qui raconte en deux temps (une porte
+  qu'on pousse, puis l'espace) mérite d'être allongé : raccourcir le voisin plutôt que couper le geste.
+- Le créateur dit « mets cette vidéo quand je parle de X » : retrouve le passage dans
   `captions`, propose les bornes, montre un `preview` au milieu du plan.
+- **Dire au créateur quels plans manquent** : chaque phrase forte qu'aucun plan de la banque
+  n'illustre vraiment, avec ce qu'il faudrait filmer (5 à 8 s, en vertical). Trois lignes, pas plus.
+
+**Après la première story validée**, note le déroulé plan par plan (temps, voix, image,
+sous-titres) dans `stories/reference.md` du dossier Monteur IA : c'est le modèle à relire avant
+chaque story suivante (même niveau de dosage, de rythme et de structure). Le créateur peut te
+dire « celle-là est la référence » pour la remplacer.
 
 ---
 
@@ -229,7 +309,9 @@ Spécificités story :
 - [ ] `story.py preview` sur 2-3 moments clés : texte lisible, sous le visage, safe-zones OK.
 - [ ] Aucun sous-titre ne bave d'une prise sur la suivante.
 - [ ] Le mot « lien » n'apparaît nulle part → 🔗.
-- [ ] B-roll : chaque plan couvre une idée entière, durées vérifiées.
+- [ ] B-roll : proposés ou posés (§4.1), chaque plan couvre une idée entière, le dernier finit à la durée du cut.
+- [ ] Musique : celle du réglage, ou proposée une fois si `story.music` est absent ; jamais si `false`.
+- [ ] Plans fournis par le créateur versés dans la banque (`broll add`), plans manquants signalés.
 
 ---
 

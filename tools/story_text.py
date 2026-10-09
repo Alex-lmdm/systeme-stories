@@ -34,6 +34,16 @@ DEFAULT_STORY = {
     "captionColor": "#ffffff",
     "plateColor": "#000000",      # fond du skin plaque/bloc (bloc préfère visual.accent s'il existe)
     "shadow": {"opacity": 0.85, "blur": 0.24, "distance": 5.0, "angle": -45.0},
+    # Cadrage du visage, appliqué au dérush sur le rush (donc sans perte de netteté) : 1 = tel quel,
+    # 1.2 = un peu plus serré. faceZoomY = point d'ancrage vertical (0 = haut, 1 = bas).
+    "faceZoom": 1.0,
+    "faceZoomY": 0.38,
+    # Musique de fond et banque de B-rolls : trois états chacun, lus par le skill `story`.
+    #   None  = jamais proposé -> l'IA le propose une fois, à la fin des sous-titres de chaque story
+    #   False = refusé -> plus jamais un mot
+    #   music : {"src": "assets/music/x.mp3", "in": 0, "volume": 0.07} ; broll : True (banque assets/b-roll/)
+    "music": None,
+    "broll": None,
 }
 BLUR_FULL_SCALE = 30.0   # flou 100 % == rayon gaussien de 30 px (calibré à l'oeil)
 

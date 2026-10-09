@@ -88,8 +88,12 @@ Installe l'extension étape par étape, sans jamais rien casser. Suis ces règle
 
 7. Affiche un TABLEAU récapitulatif ✅ / ❌ (dossier Monteur IA, skills copiés, tools copiés,
    Pillow, sync, smoke test). Si tout est ✅, conclus par : « Extension installée. Lance
-   /setup-stories : 3 questions, 2 minutes, pour poser l'allure de TES sous-titres de story.
-   Ensuite dis-moi "écris-moi un script de story" ou "on monte une story". »
+   /setup-stories : 3 minutes, pour poser l'allure de TES sous-titres de story, ton cadrage,
+   et si tu veux une musique de fond et une banque de plans de toi. Ensuite dis-moi
+   "écris-moi un script de story" ou "on monte une story". »
+   Si c'est une MISE À JOUR (le bloc existait déjà) : « Extension mise à jour. Nouveau : tes
+   retouches dans l'app ne sont plus jamais perdues, une musique de fond et une banque de
+   B-rolls en option (dis "/setup-stories musique" ou "/setup-stories b-roll" quand tu veux). »
 ```
 
 C'est tout. Laisse l'IA travailler et réponds-lui quand elle te pose une question.
