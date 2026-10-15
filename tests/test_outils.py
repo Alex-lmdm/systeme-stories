@@ -289,6 +289,64 @@ class StoryCommeUnReel(unittest.TestCase):
         self.assertEqual(json.loads((d / "story.json").read_text(encoding="utf-8"))["captions"][0]["y"], 1380.0)
         self.assertIn("<span data-layout-allow-overlap>À sa place</span>", (d / "index.html").read_text(encoding="utf-8"))
 
+    def test_banque_en_sous_dossiers(self):
+        """Banque rangée en sous-dossiers (« bali/clip.mp4 ») : listée avec son chemin, sa qualité et son
+        lieu ; un plan se verse dans un sous-dossier ; le catalogue à plat reste valable."""
+        banque = self.maison / "assets" / "b-roll"
+        (banque / "bali").mkdir(parents=True)
+        shutil.copy2(self.plan, banque / "bali" / "plage.mp4")
+        shutil.copy2(self.plan, banque / "bureau.mp4")
+        (banque / "catalog.json").write_text(json.dumps([
+            {"file": "bureau.mp4", "description": "Mon bureau", "categorie": "lieu", "duree": 2.0, "visible": False},
+            {"file": "bali/plage.mp4", "description": "Plage au coucher du soleil", "categorie": "ambiance",
+             "duree": 2.0, "visible": False, "qualite": 4, "lieu": "Kuta, Bali"},
+            {"file": "bali/perdu.mp4", "description": "Plan déplacé", "categorie": "ambiance", "duree": 3.0},
+        ], ensure_ascii=False), encoding="utf-8")
+        sortie = self.story("broll", "list").stdout
+        self.assertIn("- bureau.mp4 · 2.0 s · [lieu] · Mon bureau", sortie)
+        self.assertIn("- bali/plage.mp4 · 2.0 s · [ambiance] · qualité 4/5 · lieu : Kuta, Bali · Plage au coucher du soleil", sortie)
+        self.assertIn("bali/perdu.mp4", sortie)
+        self.assertIn("fichier absent", sortie.split("bali/perdu.mp4")[1].split("\n")[0])
+        self.assertIn("Sous-dossiers : (racine) : 1, bali : 2", sortie)
+        sortie = self.story("broll", "list", "--dossier", "bali").stdout
+        self.assertNotIn("bureau.mp4", sortie)
+        self.assertIn("2 plan(s) (sur 3)", sortie)
+
+        r = self.story("broll", "add", str(self.rush), "--description", "Rizières", "--dossier", "bali",
+                       "--nom", "rizieres", "--categorie", "Lieu", "--lieu", "Ubud", "--qualite", "5")
+        self.assertTrue((banque / "bali" / "rizieres.mp4").exists(), r.stdout + r.stderr)
+        self.assertIn('"src": "assets/b-roll/bali/rizieres.mp4"', r.stdout)
+        cat = json.loads((banque / "catalog.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(cat), 4, "les plans déjà catalogués restent")
+        self.assertEqual({k: cat[-1][k] for k in ("file", "categorie", "lieu", "qualite")},
+                         {"file": "bali/rizieres.mp4", "categorie": "lieu", "lieu": "Ubud", "qualite": 5})
+        self.assertIn("bali/rizieres.mp4", self.story("broll", "list", "--dossier", "bali").stdout)
+        # Un nouveau sous-dossier est créé propre ; jamais hors de la banque, jamais d'écrasement.
+        self.story("broll", "add", str(self.rush), "--description", "Bord de mer", "--dossier", "Côte Ouest",
+                   "--nom", "mer")
+        self.assertTrue((banque / "cote-ouest" / "mer.mp4").exists())
+        for dossier in ("../dehors", "/tmp", ".apercus"):
+            r = self.story("broll", "add", str(self.rush), "--description", "x", "--dossier", dossier, "--nom", "x",
+                           check=False)
+            self.assertNotEqual(r.returncode, 0, dossier)
+        r = self.story("broll", "add", str(self.rush), "--description", "doublon", "--dossier", "bali",
+                       "--nom", "rizieres", check=False)
+        self.assertNotEqual(r.returncode, 0, "jamais d'écrasement dans la banque")
+        # Le plan s'utilise par son chemin, sous-dossier compris.
+        d = self.maison / "stories" / "voyage"
+        self.story("init", "voyage", "--rush", str(self.rush))
+        cfg = json.loads((d / "story.json").read_text(encoding="utf-8"))
+        cfg["islands"] = [[0.2, 2.4, "test"]]
+        cfg["media"] = [{"src": "assets/b-roll/bali/rizieres.mp4", "start": 0.2, "end": 1.2, "in": 0.5}]
+        (d / "story.json").write_text(json.dumps(cfg), encoding="utf-8")
+        self.story("cut", "voyage")
+        self.assertRegex((d / "index.html").read_text(encoding="utf-8"), r'<video id="plan-0" class="plein clip" src="assets/plans/plan-0-\w+\.mp4"')
+        # Un catalogue illisible n'est jamais réécrit par-dessus.
+        (banque / "catalog.json").write_text("{ cassé", encoding="utf-8")
+        r = self.story("broll", "add", str(self.rush), "--description", "x", "--nom", "y", check=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual((banque / "catalog.json").read_text(encoding="utf-8"), "{ cassé")
+
     def test_script_d_abord_puis_video(self):
         """Dans l'app, un script se brainstorme dans le projet de la story : init --brief sans vidéo,
         puis la vidéo arrive au tournage par le même init, sans rien perdre."""

@@ -209,19 +209,26 @@ ou directement `"music": {"src": "assets/music/<fichier>", "in": 0, "volume": 0.
 `"music": false`. Le monteur ne va **pas** chercher de musique tout seul : c'est le créateur
 qui la fournit.
 
-**La banque de B-rolls** (`assets/b-roll/` du dossier Monteur IA, décrite dans `catalog.json`) :
+**La banque de B-rolls** (`assets/b-roll/` du dossier Monteur IA, décrite dans `catalog.json`).
+Elle peut être rangée en **sous-dossiers** (un voyage, un lieu : `assets/b-roll/bali/…`) : le
+`file` du catalogue est alors relatif à la banque (`bali/clip.mp4`) ; un catalogue à plat reste valable.
 
 1. **Verser d'abord les plans fournis** (souvent déposés dans la story ou glissés dans l'app),
    pour les retrouver la fois suivante :
    `story.py broll apercu <vidéo>` (planche de 3 images : regarde-la pour décrire le plan), puis
    `story.py broll add <vidéo> --description "<ce qu'on voit, en une phrase>" --categorie <lieu|ecran|geste|ambiance|createur> [--visible]`.
+   Options : `--dossier <sous-dossier>` (ex. `bali`, créé s'il n'existe pas), `--lieu "<où>"`,
+   `--qualite <1 à 5>` (5 = plan fort, 1 = dépannage).
    L'outil convertit en 1080×1920 SDR 30 i/s, garde le son, refuse d'écraser un nom existant.
    Une source filmée debout mais enregistrée couchée (4K sans rotation) : `--pivoter`, à vérifier
    sur l'aperçu avant.
 2. **Choisir sur le catalogue**, jamais en ouvrant les vidéos : `story.py broll list`
-   (description, catégorie, durée, créateur visible). Un même plan peut servir deux fois avec
-   deux `in` différents.
-3. Déclarer dans `media` (`"src": "assets/b-roll/<fichier>"`, `in` = point d'entrée dans le
+   (chemin, durée, catégorie, créateur visible, qualité et lieu s'ils sont notés, description ;
+   `--dossier bali` ou `--categorie lieu` pour resserrer). Préférer les plans de meilleure
+   qualité ; un plan marqué « fichier absent » ne se pose pas. Un même plan peut servir deux fois
+   avec deux `in` différents.
+3. Déclarer dans `media` (`"src": "assets/b-roll/<fichier>"`, le chemin tel que `broll list`
+   l'affiche, sous-dossier compris : `assets/b-roll/bali/clip.mp4` ; `in` = point d'entrée dans le
    clip). Caler le moment fort du plan sur le mot (`in` = moment du geste − (mot − start)).
 
 **Le dosage** (ce qui fait une story qui tient) :

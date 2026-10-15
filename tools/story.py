@@ -35,7 +35,10 @@ Usage :
   python3 tools/story.py compose   <slug> [--ecraser]      (Monteur IA 2 : la composition de l'app)
   python3 tools/story.py render    <slug>
   python3 tools/story.py close     <slug> [--no-archive]
-  python3 tools/story.py broll     list | apercu <vidéo> | add <vidéo> --description "…" [--nom x] [--categorie y]
+  python3 tools/story.py broll     list [--categorie y] [--dossier d]
+  python3 tools/story.py broll     apercu <vidéo>
+  python3 tools/story.py broll     add <vidéo> --description "…" [--nom x] [--categorie y] [--dossier d]
+                                   [--lieu "…"] [--qualite 1-5] [--visible] [--pivoter]
 """
 import argparse
 import difflib
@@ -1162,22 +1165,77 @@ def cmd_close(a):
 # L'IA y CHOISIT un plan sur sa description (jamais en ouvrant les vidéos), puis le déclare dans
 # `media` ("src": "assets/b-roll/<fichier>"). Un plan fourni pour une story y est versé d'abord,
 # pour être retrouvé la fois suivante. Réglage : brand.config.json -> story.broll (true | false | null).
+# La banque peut être rangée en sous-dossiers (un voyage, un lieu) : le `file` du catalogue est
+# alors relatif à assets/b-roll/ (« bali/clip.mp4 »), et un catalogue à plat reste valable tel quel.
 BROLL = ROOT / "assets" / "b-roll"
 CATALOGUE = BROLL / "catalog.json"
 
 
-def _catalogue():
+def _catalogue(strict=False):
+    """Le catalogue tel qu'écrit (liste). strict : un catalogue présent mais illisible arrête tout
+    (on ne réécrit jamais par-dessus, la description de chaque plan serait perdue)."""
+    if not CATALOGUE.exists():
+        return []
     try:
         data = json.loads(CATALOGUE.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
-    except (OSError, ValueError):
+    except (OSError, ValueError) as e:
+        if strict:
+            sys.exit(f"{CATALOGUE} illisible ({e}) : rien n'est écrit. Répare-le (ou renomme-le) d'abord.")
         return []
+    if not isinstance(data, list):
+        if strict:
+            sys.exit(f"{CATALOGUE} n'est pas une liste de plans : rien n'est écrit.")
+        return []
+    return data
 
 
 def _slug(texte):
     import unicodedata
     t = unicodedata.normalize("NFKD", texte).encode("ascii", "ignore").decode("ascii").lower()
     return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", t)).strip("-")
+
+
+def _sous_dossier(texte):
+    """Sous-dossier de la banque (« bali », « voyages/bali »), relatif à assets/b-roll/. Un dossier
+    qui existe garde son nom ; un nouveau est créé en minuscules sans accents ni espaces."""
+    if not (texte or "").strip():
+        return ""
+    brut = texte.strip().replace("\\", "/")
+    parts = [x for x in brut.split("/") if x not in ("", ".")]
+    if brut.startswith("/") or re.match(r"[A-Za-z]:", brut) or not parts or any(x.startswith(".") for x in parts):
+        sys.exit(f"--dossier « {texte} » : donne un sous-dossier de la banque, ex. --dossier bali.")
+    if (BROLL.joinpath(*parts)).is_dir():
+        return "/".join(parts)
+    slugs = [_slug(x) for x in parts]
+    if not all(slugs):
+        sys.exit(f"--dossier « {texte} » : nom de dossier vide une fois nettoyé, choisis-en un autre.")
+    return "/".join(slugs)
+
+
+def _qualite(c):
+    q = c.get("qualite", c.get("quality"))
+    if q is None or q == "":
+        return ""
+    note = isinstance(q, int) and not isinstance(q, bool) and 1 <= q <= 5
+    return f" · qualité {q}/5" if note else f" · qualité {q}"
+
+
+def _ligne_broll(c):
+    """Un plan du catalogue, une ligne : chemin (sous-dossier compris), durée, catégorie, qualité, lieu."""
+    try:
+        duree = f"{float(c.get('duree') or 0):.1f} s"
+    except (TypeError, ValueError):
+        duree = "? s"
+    qui = " · créateur visible" if c.get("visible") else ""
+    lieu = c.get("lieu") or c.get("place")
+    lieu = f" · lieu : {lieu}" if lieu else ""
+    absent = "" if (BROLL / c["file"]).is_file() else " · ⚠️ fichier absent"
+    return (f"- {c['file']} · {duree} · [{c.get('categorie', '?')}]{qui}{_qualite(c)}{lieu}"
+            f" · {c.get('description', '')}{absent}")
+
+
+def _dossier_de(c):
+    return c["file"].rsplit("/", 1)[0] if "/" in c["file"] else ""
 
 
 def _date_de(src):
@@ -1195,19 +1253,32 @@ def _hdr(src):
     return "arib-std-b67" in info or "smpte2084" in info
 
 
+def cmd_broll_list(a):
+    tous = [c for c in _catalogue() if isinstance(c, dict) and isinstance(c.get("file"), str) and c["file"]]
+    if not tous:
+        print(f"Banque vide : {BROLL}/ (story.py broll add <vidéo> --description \"…\")")
+        return
+    clips = tous
+    if a.categorie:
+        clips = [c for c in clips if _slug(str(c.get("categorie", ""))) == _slug(a.categorie)]
+    if a.dossier:
+        d = a.dossier.strip().replace("\\", "/").strip("/").lower()
+        clips = [c for c in clips if _dossier_de(c).lower() == d or _dossier_de(c).lower().startswith(d + "/")]
+    for c in clips:
+        print(_ligne_broll(c))
+    filtre = f" (sur {len(tous)})" if len(clips) != len(tous) else ""
+    print(f"\n{len(clips)} plan(s){filtre} dans {BROLL}/")
+    dossiers = {}
+    for c in tous:
+        dossiers[_dossier_de(c)] = dossiers.get(_dossier_de(c), 0) + 1
+    if set(dossiers) != {""}:
+        print("Sous-dossiers : " + ", ".join(f"{d or '(racine)'} : {n}" for d, n in sorted(dossiers.items())))
+    print("Dans story.json, le chemin tel qu'affiché, sous-dossier compris : \"src\": \"assets/b-roll/<fichier>\"")
+
+
 def cmd_broll(a):
     if a.action == "list":
-        clips = _catalogue()
-        if not clips:
-            print(f"Banque vide : {BROLL}/ (story.py broll add <vidéo> --description \"…\")")
-            return
-        for c in clips:
-            if a.categorie and c.get("categorie") != a.categorie:
-                continue
-            qui = " · créateur visible" if c.get("visible") else ""
-            print(f"- {c['file']} · {c.get('duree', 0):.1f} s · [{c.get('categorie', '?')}]{qui} · {c.get('description', '')}")
-        print(f"\n{len(clips)} plan(s) dans {BROLL}/ ; dans story.json : \"src\": \"assets/b-roll/<fichier>\"")
-        return
+        return cmd_broll_list(a)
     if not a.source:
         sys.exit("Donne la vidéo : story.py broll apercu <vidéo> | add <vidéo> --description \"…\"")
     src = pathlib.Path(a.source).expanduser().resolve()
@@ -1232,11 +1303,16 @@ def cmd_broll(a):
     # add
     if not (a.description or "").strip():
         sys.exit("Il faut --description \"<ce qu'on voit, en une phrase>\" (c'est sur elle que le plan sera choisi).")
+    if a.qualite is not None and not 1 <= a.qualite <= 5:
+        sys.exit("--qualite : de 1 (dépannage) à 5 (plan fort).")
+    clips = _catalogue(strict=True)
+    dossier = _sous_dossier(a.dossier)
     nom = _slug(a.nom) if a.nom else f"{_date_de(src)}-{_slug(src.stem)}"
-    BROLL.mkdir(parents=True, exist_ok=True)
-    out = BROLL / f"{nom}.mp4"
-    if out.exists():
-        sys.exit(f"{out.name} existe déjà dans la banque : donne un autre --nom.")
+    fichier = f"{dossier}/{nom}.mp4" if dossier else f"{nom}.mp4"
+    out = BROLL / fichier
+    if out.exists() or any(isinstance(c, dict) and c.get("file") == fichier for c in clips):
+        sys.exit(f"{fichier} existe déjà dans la banque : donne un autre --nom.")
+    out.parent.mkdir(parents=True, exist_ok=True)
     pivot = "transpose=1," if a.pivoter else ""
     cadre = f"{pivot}scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1"
     sdr = ("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable,"
@@ -1254,13 +1330,17 @@ def cmd_broll(a):
         r = run(base[:6] + ["-vf", cadre] + base[6:] + [str(out)])
     if r.returncode or not out.exists():
         sys.exit(f"Conversion impossible :\n{r.stderr[-1200:]}")
-    entree = {"file": out.name, "description": a.description.strip(), "categorie": _slug(a.categorie or "divers"),
+    entree = {"file": fichier, "description": a.description.strip(), "categorie": _slug(a.categorie or "divers"),
               "duree": round(float(probe(out) or duree), 1), "visible": bool(a.visible), "date": _date_de(src),
               "source": src.name}
-    clips = _catalogue() + [entree]
+    if a.qualite is not None:
+        entree["qualite"] = a.qualite
+    if (a.lieu or "").strip():
+        entree["lieu"] = a.lieu.strip()
+    clips = _catalogue(strict=True) + [entree]   # relu juste avant d'écrire : rien de ce qui a été versé entre-temps ne se perd
     CATALOGUE.write_text(json.dumps(clips, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print(f"-> {out}  ({entree['duree']} s, {len(clips)} plan(s) dans la banque)")
-    print(f"   story.json : {{\"src\": \"assets/b-roll/{out.name}\", \"start\": …, \"end\": …, \"in\": 0}}")
+    print(f"   story.json : {{\"src\": \"assets/b-roll/{fichier}\", \"start\": …, \"end\": …, \"in\": 0}}")
 
 
 # ----------------------------------------------------------------------- cli
@@ -1271,7 +1351,10 @@ sb.add_argument("action", choices=["list", "apercu", "add"])
 sb.add_argument("source", nargs="?", help="la vidéo (apercu, add)")
 sb.add_argument("--description", help="ce qu'on voit, en une phrase (add)")
 sb.add_argument("--nom", help="nom du fichier dans la banque (défaut : date + nom d'origine)")
-sb.add_argument("--categorie", help="ex. lieu, ecran, geste, ambiance, createur")
+sb.add_argument("--categorie", help="ex. lieu, ecran, geste, ambiance, createur (list : ne montre que celle-ci)")
+sb.add_argument("--dossier", help="sous-dossier de la banque, ex. bali (add : y verser le plan ; list : ne montrer que lui)")
+sb.add_argument("--lieu", help="où le plan a été tourné, en clair (add)")
+sb.add_argument("--qualite", type=int, help="de 1 (dépannage) à 5 (plan fort) (add)")
 sb.add_argument("--visible", action="store_true", help="le créateur est à l'image")
 sb.add_argument("--pivoter", action="store_true", help="source filmée debout mais enregistrée couchée (sans rotation)")
 sb.set_defaults(fn=cmd_broll)
