@@ -181,6 +181,10 @@ suffit souvent.
 - **`overlays`** = le bandeau motion : PNG (ou MOV alpha), centré en x, `y` = son centre
   vertical. Un **SVG est refusé** → l'exporter en PNG avant.
 - Les **sous-titres passent toujours au-dessus** de tout, y compris d'un plan plein écran.
+- Un sous-titre **placé à la main** (`x` ou `y` dans `captions`, ou déplacé dans l'app) peut en
+  chevaucher un autre exprès : lignes en escalier affichées ensemble, sous-titre descendu sous un
+  bandeau. `compose` le marque `data-layout-allow-overlap` : le contrôle de mise en page de l'app
+  (`hyperframes check`) ne le signale pas. **Ne « corrige » jamais un tel chevauchement** de toi-même.
 
 ### 4.1 B-roll et musique : l'étape qui suit les sous-titres
 

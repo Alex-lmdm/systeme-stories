@@ -244,6 +244,51 @@ class StoryCommeUnReel(unittest.TestCase):
         self.story("compose", "zoom")
         self.assertRegex((d / "index.html").read_text(encoding="utf-8"), r'<video id="plan-0" class="plein clip" src="assets/plans/plan-0-\w+\.mp4"')
 
+    def test_escaliers_et_timeline_de_la_story(self):
+        """Sous-titres placés à la main (escalier) : chevauchement voulu, marqué pour le contrôle de mise
+        en page ; un sous-titre à sa place par défaut reste contrôlé. La timeline GSAP dure toute la
+        story (une timeline vide n'avance pas sous seek), vignette d'attente comprise."""
+        d = self.maison / "stories" / "escalier"
+        self.story("init", "escalier", "--rush", str(self.rush))
+        page = (d / "index.html").read_text(encoding="utf-8")
+        self.assertIn("gsap.timeline({ paused: true }).set({}, {}, 5)", page)
+        self.assertIn('.fromTo("#etat", { opacity: 0 }, { opacity: 1, duration: 0.8 }, 0.2)', page,
+                      "la vignette change d'image sous seek")
+
+        cfg = json.loads((d / "story.json").read_text(encoding="utf-8"))
+        cfg["islands"] = [[0.2, 2.4, "test"]]
+        (d / "story.json").write_text(json.dumps(cfg), encoding="utf-8")
+        self.story("cut", "escalier")
+        cfg = json.loads((d / "story.json").read_text(encoding="utf-8"))
+        cfg["captions"] = [{"t": "À sa place", "start": 0.0, "end": 0.8},
+                           {"t": "Une ligne", "start": 0.8, "end": 2.0, "y": 1100, "size": 70},
+                           {"t": "puis l'autre", "start": 1.1, "end": 2.0, "x": 600, "y": 1160, "size": 70}]
+        (d / "story.json").write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+        self.story("compose", "escalier")
+        page = (d / "index.html").read_text(encoding="utf-8")
+        self.assertIn("<span>À sa place</span>", page, "un sous-titre à sa place reste contrôlé")
+        self.assertIn("<span data-layout-allow-overlap>Une ligne</span>", page)
+        self.assertIn("<span data-layout-allow-overlap>puis l'autre</span>", page)
+        dur = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of",
+                              "default=nw=1:nk=1", str(d / "cut.mp4")], capture_output=True, text=True).stdout.strip()
+        self.assertIn(f"gsap.timeline({{ paused: true }}).set({{}}, {{}}, {round(float(dur), 3)});", page)
+        self.assertNotIn("#etat", page)
+
+        # Le marqueur réécrit par l'app (valeur vide) n'est pas une retouche, et un sous-titre déplacé
+        # dans l'app le reçoit à la réécriture (sa place est reportée dans story.json).
+        (d / "index.html").write_text(page.replace("data-layout-allow-overlap>", 'data-layout-allow-overlap="">'),
+                                      encoding="utf-8")
+        r = self.story("compose", "escalier")
+        self.assertNotIn("Retouche", r.stdout)
+        self.assertEqual((d / "index.html").read_text(encoding="utf-8"), page)
+        (d / "index.html").write_text(page.replace('style="top: 1124px; height: 112px; font-size: 56px"',
+                                                   'style="top: 1324px; height: 112px; font-size: 56px"'),
+                                      encoding="utf-8")
+        r = self.story("compose", "escalier")
+        self.assertIn("reportées dans story.json", r.stdout)
+        self.assertEqual(json.loads((d / "story.json").read_text(encoding="utf-8"))["captions"][0]["y"], 1380.0)
+        self.assertIn("<span data-layout-allow-overlap>À sa place</span>", (d / "index.html").read_text(encoding="utf-8"))
+
     def test_script_d_abord_puis_video(self):
         """Dans l'app, un script se brainstorme dans le projet de la story : init --brief sans vidéo,
         puis la vidéo arrive au tournage par le même init, sans rien perdre."""

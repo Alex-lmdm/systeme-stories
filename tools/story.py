@@ -187,7 +187,8 @@ COMPOSITION = """<!DOCTYPE html>
     </div>
     <script>
       window.__timelines = window.__timelines || {{}};
-      window.__timelines["{cid}"] = gsap.timeline({{ paused: true }});
+      // La timeline dure toute la story : vide, elle n'avancerait pas sous seek (contrôle de l'app).
+      window.__timelines["{cid}"] = gsap.timeline({{ paused: true }}).set({{}}, {{}}, {dur}){anim};
     </script>
   </body>
 </html>
@@ -587,10 +588,14 @@ def composer(slug, publiee=False, ecraser=False, auto=True):
             txt = c["t"].upper() if cfg.get("caption_case", st.get("captionCase")) == "upper" else c["t"]
             size, y = c.get("size", cfg["caption_size"]), c.get("y", cfg["caption_y"])
             decale = f"; translate: {c['x'] - W / 2:.1f}px 0px" if "x" in c else ""
+            # Placé à la main (x ou y : lignes en escalier, affichées ensemble) : le chevauchement
+            # est voulu, on le dit au contrôle de mise en page (hyperframes check), sinon il le
+            # signale et l'IA le « corrige ». Posé sur le bloc de texte lui-même (non hérité).
+            voulu = " data-layout-allow-overlap" if {"x", "y"} & c.keys() else ""
             corps.append(f'      <div id="st-{i}" class="repere sous-titre clip" data-start="{c["start"]:.3f}" '
                          f'data-duration="{c["end"] - c["start"]:.3f}" data-track-index="{piste}" '
                          f'style="top: {y - size}px; height: {2 * size}px; font-size: {size}px{decale}">'
-                         f'<span>{HTML.escape(txt, quote=False)}</span></div>')
+                         f'<span{voulu}>{HTML.escape(txt, quote=False)}</span></div>')
         mu = cfg.get("music")
         if mu:
             corps.append(f'      <audio id="musique" src="{_musique(slug, mu)}" data-start="0" data-duration="{dur}" '
@@ -598,7 +603,11 @@ def composer(slug, publiee=False, ecraser=False, auto=True):
         etat = (f"{len(medias)} plan(s), {len(bandeaux)} bandeau(x), {len(cfg.get('captions', []))} sous-titres"
                 + (", musique" if mu else ""))
     taille = cfg.get("caption_size", st["captionSize"])
-    contenu = COMPOSITION.format(slug=slug, cid=f"story-{slug}", dur=dur, etat=etat, corps="\n".join(corps),
+    # Vignette sans vidéo : sa ligne d'état apparaît en fondu, sinon l'image ne change jamais et le
+    # contrôle de l'app (« Timeline did not advance under seek ») croit la composition cassée.
+    anim = ('.fromTo("#etat", { opacity: 0 }, { opacity: 1, duration: 0.8 }, 0.2)'
+            if publiee or not cut.exists() else "")
+    contenu = COMPOSITION.format(slug=slug, cid=f"story-{slug}", dur=dur, etat=etat, corps="\n".join(corps), anim=anim,
                                  polices=_polices(slug, st), couleur=st["captionColor"], skin=_skin_css(st, taille))
     page.write_text(contenu, encoding="utf-8")
     if not (publiee or not cut.exists()):
