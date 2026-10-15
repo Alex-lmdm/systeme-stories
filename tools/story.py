@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pipeline STORY Instagram (format vertical 1080x1920, 30 fps) — 100 % ffmpeg, sans studio.
+"""Pipeline STORY Instagram (format vertical 1080x1920, 30 fps) : 100 % ffmpeg, sans studio.
 
 POURQUOI un pipeline séparé des Reels : une story = visage plein écran, sous-titres sobres,
 parfois un plan filmé en plein écran et un petit bandeau motion. Zéro split-screen, zéro
@@ -754,7 +754,7 @@ def cmd_silences(a):
         if dur - cur > 0.25:
             bounds.append((cur, dur))
 
-        print(f"{len(bounds)} îlots ({a.noise} dB, d={a.d}) — à recroiser AVANT de remplir `islands`\n")
+        print(f"{len(bounds)} îlots ({a.noise} dB, d={a.d}), à recroiser AVANT de remplir `islands`\n")
         for i, (s, e) in enumerate(bounds):
             txt = ""
             if not a.no_text:
@@ -1044,7 +1044,7 @@ def cmd_render(a):
     for o in cfg.get("overlays", []):
         src = o["src"] if str(o["src"]).startswith("/") else str(ROOT / o["src"])
         if src.lower().endswith(".svg"):
-            sys.exit(f"SVG non rasterisé : {src} — exporter en PNG avant le render.")
+            sys.exit(f"SVG non rasterisé : {src} (l'exporter en PNG avant le render).")
         inputs += ["-i", src]
         w = o.get("w", 420)
         # image fixe -> `overlay` répète sa dernière frame (eof_action=repeat) : ne JAMAIS
@@ -1064,7 +1064,7 @@ def cmd_render(a):
         txt = c["t"].upper() if cfg["caption_case"] == "upper" else c["t"]
         size = c.get("size", cfg["caption_size"])
         if ST.measure(txt, size)[0] > ST.MAX_TEXT_W:
-            sys.exit(f"Sous-titre trop large : « {txt} » — re-couper.")
+            sys.exit(f"Sous-titre trop large : « {txt} », à re-couper.")
         img, ax, ay = ST.render_caption(txt, size=size, story=st)
         p = tmpd / f"cap{i:03d}.png"
         img.save(p)

@@ -21,6 +21,18 @@ DEPOT = pathlib.Path(__file__).resolve().parents[1]
 PIL_PRESENT = importlib.util.find_spec("PIL") is not None
 
 
+class SansTiretLong(unittest.TestCase):
+    """Rien de ce qui est livré (outils, skills, consignes, README, INSTALL) ne contient de tiret
+    long : l'IA du client reprend ce qu'elle lit, et ce tiret signe un texte écrit par une IA."""
+
+    def test_fichiers_livres(self):
+        livres = [*(DEPOT / "tools").rglob("*.py"), *(DEPOT / ".claude" / "skills").rglob("*.*"),
+                  *(DEPOT / "templates").glob("*.md"), DEPOT / "README.md", DEPOT / "INSTALL.md"]
+        fautifs = [f"{p.relative_to(DEPOT)}:{n}" for p in livres if p.is_file()
+                   for n, ligne in enumerate(p.read_text(encoding="utf-8").splitlines(), 1) if "\u2014" in ligne]
+        self.assertEqual(fautifs, [])
+
+
 @unittest.skipUnless(PIL_PRESENT, "Pillow absent (story_text.py en dépend)")
 class SortieWindows(unittest.TestCase):
     """Windows : la sortie lue par l'agent est en cp1252 ; le « ⚠️ » de `story.py captions` ne doit

@@ -8,7 +8,7 @@ description: >-
   B-rolls de story, or at the first story if the `story` section is missing from brand.config.json.
 ---
 
-# /setup-stories — le style de tes stories, une fois
+# /setup-stories : le style de tes stories, une fois
 
 > **3 minutes, 6 questions, dont 3 optionnelles.** Une story n'a presque pas de style : c'est
 > voulu, le format doit avoir l'air spontané. Ce qu'on pose : l'allure des sous-titres (à toi,
@@ -37,7 +37,7 @@ description: >-
 Un bloc seul se refait sans tout reprendre : « /setup-stories musique », « /setup-stories
 b-roll », « /setup-stories cadrage » → poser seulement la question concernée, écrire, s'arrêter.
 
-### Q1 — Le skin des sous-titres
+### Q1 : le skin des sous-titres
 
 « Tes sous-titres de story, tu les veux comment ? » (montrer les 4, recommander `ombre`) :
 
@@ -51,13 +51,13 @@ b-roll », « /setup-stories cadrage » → poser seulement la question concern�
 → `story.captionsSkin`. Couleur du texte : blanc par défaut (`story.captionColor`), ne demander
 que si l'utilisateur veut autre chose.
 
-### Q2 — La taille et la casse
+### Q2 : la taille et la casse
 
 « Taille de texte 56 px (bon défaut, lisible sans crier) et casse naturelle, ça te va ? »
 La casse naturelle est recommandée : le tout-majuscules crie, une story parle.
 → `story.captionSize` (56), `story.captionCase` (`as-is` | `upper`).
 
-### Q3 — La position, calibrée sur TON cadrage (optionnelle mais recommandée)
+### Q3 : la position, calibrée sur TON cadrage (optionnelle mais recommandée)
 
 Le sous-titre se pose **juste sous le visage**. Le bon `captionY` dépend de comment la personne
 se cadre. Deux chemins :
@@ -136,7 +136,7 @@ que si le créateur a répondu) :
 ```
 
 `captionFont` reste `null` sauf demande explicite : le défaut (Inter 900, livré avec le produit
-principal) est le bon choix pour 95 % des gens — une graisse forte reste lisible en petit.
+principal) est le bon choix pour 95 % des gens : une graisse forte reste lisible en petit.
 
 Conclure par : « C'est réglé. Dis-moi "on monte une story" avec ta vidéo brute, ou "écris-moi
 un script de story" si tu pars de zéro. » (et, si musique ou B-rolls sont restés en « pas

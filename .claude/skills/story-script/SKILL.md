@@ -4,7 +4,7 @@ description: >-
   Écrit le script parlé d'une STORY Instagram face caméra dans la voix du créateur, prêt à lire
   au prompteur (20 à 55 secondes, ton décontracté). Use when the user wants a story script: he
   brings une idée en vrac, une réflexion du jour, un contenu ou une offre à teaser, une nouveauté
-  à annoncer — and wants the finished script. Produit du texte ; le montage relève du skill story.
+  à annoncer, and wants the finished script. Produit du texte ; le montage relève du skill story.
 ---
 
 # Script de story (voix du créateur, prêt prompteur)
@@ -25,14 +25,14 @@ le skill sort un texte qu'il n'a plus qu'à lire au prompteur, naturellement, co
 
 Dès que le créateur veut une story parlée, quel que soit le point de départ :
 
-1. **Une idée en vrac** — « j'aimerais faire une story où je parle de ça, ça et ça ».
+1. **Une idée en vrac** : « j'aimerais faire une story où je parle de ça, ça et ça ».
 2. **Une réflexion, une anecdote, un moment de vie** à partager avec ses abonnés.
-3. **Un contenu à teaser** — un post qui vient de sortir, un article, une vidéo en préparation.
+3. **Un contenu à teaser** : un post qui vient de sortir, un article, une vidéo en préparation.
 4. **Une offre à vendre en douceur**, ou une nouveauté à annoncer.
 5. **Un brouillon** qu'il veut passer à sa sauce.
 
 **Toujours commencer par demander** (une seule question) : « Tu veux partager quoi dans cette
-story ? » — et le laisser vider son sac en vrac. C'est la matière première. Ne jamais écrire à
+story ? », et le laisser vider son sac en vrac. C'est la matière première. Ne jamais écrire à
 partir de rien.
 
 ---
@@ -55,12 +55,12 @@ mieux : le format se poste plusieurs fois par jour).
 
 ---
 
-## 2. Le hook — la première ligne fait tout
+## 2. Le hook : la première ligne fait tout
 
 Personne ne « scrolle » une story, mais tout le monde peut la passer d'un tap. La première
 phrase décide s'ils restent. Deux procédés, à choisir selon le sujet :
 
-**Procédé 1 — la phrase inattendue.** Jamais d'ouverture générique (« Je voulais te parler
+**Procédé 1 : la phrase inattendue.** Jamais d'ouverture générique (« Je voulais te parler
 de… », « Aujourd'hui je vais te montrer… »). À la place, une affirmation qui surprend, une
 question qui pique, ou une anecdote qui démarre au milieu de l'action. L'effet cherché :
 « attends… quoi ? ». Des patrons qui marchent :
@@ -72,7 +72,7 @@ question qui pique, ou une anecdote qui démarre au milieu de l'action. L'effet 
 - « Je sais que tu vas lever les yeux au ciel, mais… »
 - « [Untel] m'a posé une question hier, et j'y pense encore. »
 
-**Procédé 2 — le résultat d'abord.** Commencer par le résultat, jamais par le processus.
+**Procédé 2 : le résultat d'abord.** Commencer par le résultat, jamais par le processus.
 Promettre l'arrivée dans les premiers mots, dérouler le chemin ensuite.
 
 - ❌ « J'ai découvert une méthode pour mieux dormir » → ✅ « Je n'ai pas eu besoin de réveil
@@ -84,7 +84,7 @@ Promettre l'arrivée dans les premiers mots, dérouler le chemin ensuite.
 
 ---
 
-## 3. Le corps — écrire comme on parle à UN abonné
+## 3. Le corps : écrire comme on parle à UN abonné
 
 - **Tutoiement**, comme si on parlait à une seule personne, pas à une audience.
 - **Phrases courtes, fragments assumés.** Une idée par ligne. Le point est une respiration.
@@ -127,7 +127,7 @@ Choisie selon la famille (§1). Trois règles transverses :
 
 ## 6. Anti-slop (ce qu'il ne faut JAMAIS faire)
 
-- ❌ Pas de tirets longs (—).
+- ❌ Pas de tiret long (le tiret cadratin) : une virgule, deux-points ou des parenthèses à la place.
 - ❌ Pas d'ouverture générique (« Salut à tous », « J'espère que vous allez bien », « Petit
   point rapide »).
 - ❌ Pas de ton corporate ou IA (« Découvrez », « N'hésitez pas », « au programme aujourd'hui »).

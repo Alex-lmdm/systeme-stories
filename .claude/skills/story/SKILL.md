@@ -9,7 +9,7 @@ description: >-
   Entrée : un rush brut. Sortie : un MP4 1080x1920 prêt à poster.
 ---
 
-# Story Instagram — le montage
+# Story Instagram : le montage
 
 > ⚠️ **Ce n'est PAS le pipeline Reel.** Une story se publie souvent, vit 24 h et n'a presque pas
 > de motion : ni split-screen, ni sections de motion, ni `compositions/`. Tout passe par
@@ -72,7 +72,7 @@ que s'il sert ce que la personne est en train de dire.
 
 ---
 
-## 2. Isolation — une story n'écrase jamais un reel
+## 2. Isolation : une story n'écrase jamais un reel
 
 Tout vit dans `stories/<slug>/` :
 
@@ -113,12 +113,12 @@ python3 tools/story.py render   <slug>          # MP4 final (copié dans ~/Downl
 python3 tools/story.py broll    list            # la banque de B-rolls du créateur (§4.1)
 ```
 
-### 3.1 Dérush — choisir les prises
+### 3.1 Dérush : choisir les prises
 
 - Bornes = **îlots `silencedetect`** (`-40 dB`, `d=0.18`), **jamais** un timestamp Whisper
   (un LLM ne donne JAMAIS de timestamp de coupe fiable ; le *où couper* vient d'outils
   déterministes, le *quoi garder* vient du raisonnement).
-- `pad_start 0.04` / `pad_end 0.02` (valeurs éprouvées) — resserrer les **fins**, jamais les
+- `pad_start 0.04` / `pad_end 0.02` (valeurs éprouvées) : resserrer les **fins**, jamais les
   débuts (les voyelles d'attaque sont fragiles).
 
 **C'est TOI (l'agent) qui proposes la sélection, pas l'utilisateur.** Après `story.py silences` :
@@ -147,7 +147,7 @@ suffit souvent.
 
 ---
 
-## 4. `story.json` — le seul fichier à éditer
+## 4. `story.json` : le seul fichier à éditer
 
 ```jsonc
 {
@@ -174,7 +174,7 @@ suffit souvent.
   `[start, end]`. Il est **muet** : la voix du cut continue dessous. `src` = un chemin absolu, ou
   relatif au dossier Monteur IA (la banque : `assets/b-roll/<fichier>`).
   - `fit: "cover"` (défaut) : recadré plein cadre (`scale`+`crop` centré).
-  - `fit: "blur"` : pour un plan horizontal ou une photo qui ne remplit pas le cadre — posé net
+  - `fit: "blur"` : pour un plan horizontal ou une photo qui ne remplit pas le cadre, posé net
     sur son propre fond flouté, sans déformation.
   - `story.py render` **vérifie les durées** avant de lancer ffmpeg : un plan trop court ou un
     `end` au-delà du cut échoue avec un message clair, pas une erreur ffmpeg cryptique.
@@ -259,7 +259,7 @@ dire « celle-là est la référence » pour la remplacer.
 
 ---
 
-## 5. Sous-titres — le découpage par unité grammaticale
+## 5. Sous-titres : le découpage par unité grammaticale
 
 `story.py captions` produit un **1er jet légal en largeur mais SANS conscience grammaticale**.
 Le découpage final se décide par **unité grammaticale**, se propose à l'utilisateur, et une fois
@@ -303,7 +303,7 @@ Spécificités story :
 ## 6. Safe-zones
 
 - Rien d'important dans les **~150 px du haut** (Instagram y pose son UI).
-- Rien d'important à **moins de 100 px** des bords — c'est la limite des 880 px de large.
+- Rien d'important à **moins de 100 px** des bords (c'est la limite des 880 px de large).
 - Bas de cadre : garder **~250 px libres** (barre « Répondre » d'Instagram).
 - **Si l'utilisateur prévoit un sticker Instagram** (lien, sondage, question) : demander OÙ il
   compte le poser, et laisser cette zone libre de sous-titres et de bandeaux. Le classique :
@@ -326,16 +326,16 @@ Spécificités story :
 
 ---
 
-## 8. Porte de sortie — quand une story a VRAIMENT besoin de motion
+## 8. Porte de sortie : quand une story a VRAIMENT besoin de motion
 
 Ne pas basculer toute la story sur HyperFrames. Fabriquer **le seul bandeau concerné** en
 composition, le rendre en **overlay transparent**, puis le déclarer dans `overlays` :
 
 Deux patrons prêts à copier dans `references/` :
 
-- **`bandeau-texte.html`** — 2 à 4 mots qui claquent (un chiffre, un nom, une punchline), dans
+- **`bandeau-texte.html`** : 2 à 4 mots qui claquent (un chiffre, un nom, une punchline), dans
   les couleurs du `brand.config.json` du créateur.
-- **`bandeau-logos.html`** — des logos qui arrivent l'un après l'autre, groupe recentré à
+- **`bandeau-logos.html`** : des logos qui arrivent l'un après l'autre, groupe recentré à
   chaque arrivée.
 
 Copier le patron dans `stories/<slug>/`, adapter textes et timings, puis :
@@ -368,7 +368,7 @@ Le reste du pipeline ne change pas.
 - Un `-ss` au-delà de la durée du fichier produit un MP4 **sans flux vidéo**. `story.py render`
   vérifie désormais les durées avant de lancer ffmpeg.
 - Une prise **sans aucun sous-titre** (recouverte par un plan : `"chunks": [[…], [], …]`) est
-  légitime — `story.py captions` la saute au lieu de planter.
+  légitime : `story.py captions` la saute au lieu de planter.
 - Un sous-titre qui déborde de 880 px = `story.py` s'arrête net. C'est voulu : re-couper, ne
   jamais réduire la police pour faire rentrer.
 - Caméras à 2 flux vidéo (DJI : 2ᵉ flux mjpeg) : `story.py` mappe déjà `[0:v:0]` explicitement.
