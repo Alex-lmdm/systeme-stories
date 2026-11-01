@@ -89,10 +89,10 @@ stories/<slug>/
 est la composition de la story). Une story et un reel peuvent donc être montés en parallèle sans se marcher
 dessus.
 
-Une fois la story postée : `python3 tools/story.py close <slug>` archive le master dans
+Une fois la story postée, et à sa demande seulement : `python3 tools/story.py close <slug>` archive le master dans
 `~/Movies/stories-publiees/<slug>/` puis efface le travail (compter ~200 Mo par story). En Monteur
 IA 2, le projet de l'app reste, marqué publié (seuls les médias partent) ; en Monteur IA 1, le
-dossier est supprimé. `--no-archive` pour ne rien garder du tout.
+dossier est supprimé. `--no-archive` (rien gardé) seulement s'il le dit.
 
 ---
 
