@@ -1120,6 +1120,11 @@ def cmd_close(a):
 
     Ce qui doit survivre à une story, c'est la MÉTHODE (les skills), pas le montage : une story
     vit 24 h. Le master est archivé dans ~/Movies/stories-publiees/ sauf --no-archive.
+
+    tools/apres_rangement.py, s'il existe : un outil à soi (ni Monteur IA ni cette extension n'en
+    livrent, une mise à jour n'y touche donc jamais), dont la fonction apres_rangement(dossier,
+    video=...) passe avant que le travail parte, avec la vidéo parlée (le master, sinon cut.mp4).
+    Son erreur n'empêche pas la clôture.
     """
     d = sdir(a.slug)
     if not d.exists():
@@ -1134,6 +1139,12 @@ def cmd_close(a):
         print(f"master archivé -> {arch / master.name}")
     elif not master:
         print("aucun master trouvé (rien à archiver)")
+    if (pathlib.Path(__file__).resolve().parent / "apres_rangement.py").is_file():
+        try:
+            import apres_rangement as crochet
+            crochet.apres_rangement(d, video=master or (d / "cut.mp4" if (d / "cut.mp4").is_file() else None))
+        except (Exception, SystemExit) as erreur:
+            print(f"tools/apres_rangement.py n'a pas abouti ({erreur}) : la story se ferme quand même")
     if not APP:
         size = sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
         shutil.rmtree(d)

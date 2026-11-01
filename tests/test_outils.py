@@ -194,7 +194,17 @@ class StoryCommeUnReel(unittest.TestCase):
         shutil.copy2(d / "cut.mp4", d / "story_essai_FINAL.mp4")
         (d / "renders").mkdir()
         shutil.copy2(d / "cut.mp4", d / "renders" / "export-app.mp4")   # l'export du bouton Export de l'app
+        # L'outil à soi (tools/apres_rangement.py, jamais livré) : son erreur n'empêche pas la clôture, et
+        # il passe avant que le travail parte, avec la vidéo parlée.
+        crochet = self.maison / "tools" / "apres_rangement.py"
+        crochet.write_text("def apres_rangement(dossier, video=None):\n    raise RuntimeError('boum')\n", encoding="utf-8")
+        self.assertIn("apres_rangement.py n'a pas abouti (boum)", self.story("close", "essai", "--no-archive").stdout)
+        shutil.copy2(d / "renders" / "export-app.mp4", d / "story_essai_FINAL.mp4")
+        crochet.write_text("def apres_rangement(dossier, video=None):\n"
+                           "    (dossier.parent.parent / 'crochet.txt').write_text(f'{dossier.name} {video.name} {video.is_file()}')\n",
+                           encoding="utf-8")
         self.story("close", "essai", "--no-archive")
+        self.assertEqual((self.maison / "crochet.txt").read_text(encoding="utf-8"), "essai story_essai_FINAL.mp4 True")
         self.assertEqual(sorted(p.name for p in d.iterdir()),
                          ["assets", "hyperframes.json", "index.html", "meta.json", "renders", "story.json"],
                          "les dossiers de l'app (renders/, caches) ne sont jamais touchés à la clôture")
