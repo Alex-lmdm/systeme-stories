@@ -5,7 +5,7 @@
 Une story Instagram n'est **pas un petit Reel** : ses propres skills, pas les 7 étapes.
 Elle vit dans `stories/<slug>/` du dossier Monteur IA, jamais dans un Reel.
 
-- « une story », « monte ma story », « monta esta story » → skill **`story`**, et rien d'autre.
+- Une vidéo de story à monter (« monte ma story », « monta esta story ») → skill **`story`**. Stories en images à poster : skill `community-manager` s'il est installé.
 - « un script de story », « un guion de story » → skill **`story-script`**.
 - `/setup-stories`, « personnaliser mes stories », musique, plans pour la banque → skill **`setup-stories`**.
 - Rappels : visage plein écran, ni split-screen ni motion de Reel ; tout passe par `tools/story.py` ;

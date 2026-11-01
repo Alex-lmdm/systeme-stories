@@ -4,7 +4,7 @@ description: >-
   Écrit le script parlé d'une STORY Instagram face caméra dans la voix du créateur, prêt à lire
   au prompteur (20 à 55 secondes, ton décontracté). Use when the user wants a story script: he
   brings une idée en vrac, une réflexion du jour, un contenu ou une offre à teaser, une nouveauté
-  à annoncer, and wants the finished script. Produit du texte ; le montage relève du skill story.
+  à annoncer, and wants the finished script. Produit le texte parlé ; le montage relève du skill story. PAS pour une séquence de stories en images (skill community-manager, s'il est installé).
 ---
 
 # Script de story (voix du créateur, prêt prompteur)

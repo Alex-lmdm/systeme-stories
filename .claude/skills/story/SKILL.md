@@ -4,7 +4,7 @@ description: >-
   Montage d'une STORY Instagram : visage plein écran, naturel, sous-titres sobres une ligne,
   parfois un plan filmé en plein écran (B-roll) et un petit bandeau motion. Use when the user says
   « une story », « monte ma story », « c'est pour les stories » with a face-cam rush.
-  PAS un Reel (→ derush + motion-design) : zéro split-screen, zéro motion de Reel, tout passe par
+  PAS un Reel (→ derush + motion-design) ni des stories en images (skill community-manager, s'il est installé) : zéro split-screen, zéro motion de Reel, tout passe par
   tools/story.py (B-rolls de la banque du créateur, musique de fond réglée une fois).
   Entrée : un rush brut. Sortie : un MP4 1080x1920 prêt à poster.
 ---
