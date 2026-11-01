@@ -96,7 +96,7 @@ dossier est supprimé. `--no-archive` (rien gardé) seulement s'il le dit.
 
 ---
 
-## 3. Le pipeline (7 commandes)
+## 3. Le pipeline
 
 Ordre d'une story : **dérush → sous-titres → B-roll (§4.1) → review du créateur → export**.
 
@@ -141,7 +141,7 @@ python3 tools/story.py broll    list            # la banque de B-rolls du créat
 ### 3.2 Nettoyage audio (optionnel mais recommandé)
 
 Si l'utilisateur veut le son « studio », applique la même méthode que pour les Reels
-(`brand.config.json` → `audio.enhanceMethod`) : Adobe Podcast Enhance sur l'audio du cut, puis
+(skill `derush`, étape 7) : Adobe Podcast Enhance sur l'audio du cut, puis
 remuxer. La voix d'une story peut aussi rester brute : c'est un format spontané, un son propre
 suffit souvent.
 

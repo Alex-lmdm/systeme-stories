@@ -67,7 +67,7 @@ se cadre. Deux chemins :
 - **Avec un rush test** (recommandé) : demander une vidéo de quelques secondes cadrée comme
   d'habitude, puis :
   1. `python3 tools/story.py init calibrage --rush <fichier>`
-  2. Créer un îlot factice couvrant 2-3 s, `cut`, puis `story.py preview calibrage --t 1.0 --text "un sous-titre de test"`
+  2. Écrire un îlot factice de 2-3 s dans `islands` de `stories/calibrage/story.json`, puis `cut`, puis `story.py preview calibrage --t 1.0 --text "un sous-titre de test"`
   3. Montrer le PNG : « le texte est bien sous ton visage ? trop haut ? trop bas ? »
   4. Ajuster `caption_y` par pas de 60-80 px, re-preview, jusqu'au « parfait ».
   5. Écrire la valeur dans `story.captionY`, puis `python3 tools/story.py close calibrage --no-archive`.
